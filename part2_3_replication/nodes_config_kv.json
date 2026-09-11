@@ -1,0 +1,8 @@
+{
+  "_comment": "Ports 5105x so the KV store can run alongside the Part 4/5 compute app (which uses 50051/50052). Use with: ./start_kv_cluster.sh nodes_config_kv.json",
+  "nodes": [
+    { "id": 0, "host": "localhost", "port": 51051, "raft_dir": "./kv_state_node0" },
+    { "id": 1, "host": "localhost", "port": 51052, "raft_dir": "./kv_state_node1" },
+    { "id": 2, "host": "localhost", "port": 51053, "raft_dir": "./kv_state_node2" }
+  ]
+}

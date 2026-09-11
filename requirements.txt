@@ -1,0 +1,7 @@
+# Core RPC / serialization (file system, replication, Raft, KV store, ML trainer)
+grpcio>=1.60
+grpcio-tools>=1.60
+protobuf>=4.25
+
+# Encrypted socket transport for the non-gRPC file server (part1_filesystem/fs_wo_grpc)
+cryptography>=42.0

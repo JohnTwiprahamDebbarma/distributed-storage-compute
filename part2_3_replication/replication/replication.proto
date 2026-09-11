@@ -1,0 +1,82 @@
+syntax = "proto3";
+
+package replication;
+
+// Peer-to-peer replication service between replica servers
+service ReplicationService {
+  rpc ReplicateWrite   (ReplicateWriteRequest)   returns (ReplicateWriteResponse)   {}
+  rpc ReplicateCreate  (ReplicateCreateRequest)  returns (ReplicateCreateResponse)  {}
+  rpc Heartbeat        (HeartbeatRequest)        returns (HeartbeatResponse)        {}
+  rpc GetClusterInfo   (GetClusterInfoRequest)   returns (GetClusterInfoResponse)   {}
+  rpc SyncState        (SyncStateRequest)        returns (SyncStateResponse)        {}
+  rpc AnnounceLeader   (AnnounceLeaderRequest)   returns (AnnounceLeaderResponse)   {}
+}
+
+// ---- Write replication (primary -> backup) ----
+message ReplicateWriteRequest {
+  string filename    = 1;
+  bytes  file_data   = 2;
+  int32  new_version = 3;
+}
+
+message ReplicateWriteResponse {
+  bool   success       = 1;
+  string error_message = 2;
+}
+
+// ---- Create replication (primary -> backup) ----
+message ReplicateCreateRequest {
+  string filename = 1;
+}
+
+message ReplicateCreateResponse {
+  bool   success       = 1;
+  string error_message = 2;
+}
+
+// ---- Heartbeat ----
+message HeartbeatRequest {
+  string sender_addr = 1;   // "host:port" of sender
+  string role        = 2;   // "primary" or "backup"
+}
+
+message HeartbeatResponse {
+  bool   alive           = 1;
+  string role            = 2;
+  string primary_address = 3;  // current primary "host:port" as known by this server
+}
+
+// ---- Cluster info (used by clients and peers) ----
+message GetClusterInfoRequest {}
+
+message GetClusterInfoResponse {
+  string primary_address = 1;  // "host:port" of current primary
+  string my_role         = 2;
+  bool   success         = 3;
+}
+
+// ---- Full state sync (recovering server -> primary) ----
+message SyncStateRequest {
+  string requester_addr = 1;
+}
+
+message FileEntry {
+  string filename  = 1;
+  bytes  file_data = 2;
+  int32  version   = 3;
+}
+
+message SyncStateResponse {
+  repeated FileEntry files = 1;
+  bool               success       = 2;
+  string             error_message = 3;
+}
+
+// ---- Leader announcement (new primary -> all peers) ----
+message AnnounceLeaderRequest {
+  string new_primary_address = 1;
+}
+
+message AnnounceLeaderResponse {
+  bool success = 1;
+}

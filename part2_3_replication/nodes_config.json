@@ -1,0 +1,25 @@
+{
+  "nodes": [
+    {
+      "id": 0,
+      "host": "localhost",
+      "port": 50051,
+      "data_dir": "./server_data_node0",
+      "raft_dir": "./raft_state_node0"
+    },
+    {
+      "id": 1,
+      "host": "localhost",
+      "port": 50052,
+      "data_dir": "./server_data_node1",
+      "raft_dir": "./raft_state_node1"
+    },
+    {
+      "id": 2,
+      "host": "localhost",
+      "port": 50053,
+      "data_dir": "./server_data_node2",
+      "raft_dir": "./raft_state_node2"
+    }
+  ]
+}

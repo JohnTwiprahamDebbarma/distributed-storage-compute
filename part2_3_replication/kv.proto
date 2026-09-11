@@ -1,0 +1,67 @@
+syntax = "proto3";
+
+package kv;
+
+// Client-facing key-value API for the Raft-replicated store (mini-etcd).
+// Writes (Put/Delete/Cas) are committed through the Raft log; reads (Get) are
+// served by the leader. Inter-node consensus uses raft.proto (RaftService).
+service KVService {
+  rpc Put    (PutRequest)    returns (PutResponse)    {}
+  rpc Get    (GetRequest)    returns (GetResponse)    {}
+  rpc Delete (DeleteRequest) returns (DeleteResponse) {}
+  rpc Cas    (CasRequest)    returns (CasResponse)    {}  // compare-and-swap
+}
+
+// success=false with error_message "NOT_LEADER:<id>:<host:port>" tells the
+// client to redirect to the current leader.
+
+message PutRequest {
+  string key       = 1;
+  bytes  value     = 2;
+  string client_id = 3;   // idempotency: identifies the caller
+  int64  seq_num   = 4;   // idempotency: monotonically increasing per caller
+}
+message PutResponse {
+  bool   success       = 1;
+  int64  version       = 2;   // new version of the key after the write
+  string error_message = 3;
+}
+
+message GetRequest {
+  string key          = 1;
+  bool   linearizable = 2;   // if true, commit a read barrier before serving
+}
+message GetResponse {
+  bool   found         = 1;
+  bytes  value         = 2;
+  int64  version       = 3;
+  bool   success       = 4;
+  string error_message = 5;
+}
+
+message DeleteRequest {
+  string key       = 1;
+  string client_id = 2;
+  int64  seq_num   = 3;
+}
+message DeleteResponse {
+  bool   success       = 1;
+  bool   existed       = 2;   // whether the key existed before the delete
+  string error_message = 3;
+}
+
+message CasRequest {
+  string key           = 1;
+  bytes  expected      = 2;   // required current value (ignored if expect_absent)
+  bytes  new_value     = 3;
+  bool   expect_absent = 4;   // if true, apply only when the key is currently absent
+  string client_id     = 5;
+  int64  seq_num       = 6;
+}
+message CasResponse {
+  bool   success       = 1;   // request handled by the leader (not a redirect)
+  bool   swapped       = 2;   // whether the CAS condition held and the value changed
+  bytes  current       = 3;   // value after the op (or the mismatching current value)
+  int64  version       = 4;
+  string error_message = 5;
+}
