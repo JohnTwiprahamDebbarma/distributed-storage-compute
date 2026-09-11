@@ -57,10 +57,12 @@ class RaftNode:
         self._apply_cv = threading.Condition(self.lock)
 
         # Waiting client RPC futures
-        # log_index -> threading.Event
-        self._commit_events = {}
-        # log_index -> result dict or Exception
-        self._commit_results = {}
+        # log_index -> waiter dict {term, client_id, seq_num, event, result}
+        # Each waiter records the identity of the entry the caller appended, so a
+        # commit at the same index for a DIFFERENT entry (after this node loses
+        # leadership and a new leader overwrites the slot) is never mistaken for
+        # the caller's own write. See _fail_all_waiters and the applier.
+        self._commit_waiters = {}
 
         # gRPC stubs (populated lazily by raft_server.py)
         self.peer_stubs = {}   # {peer_id: RaftServiceStub}
@@ -110,24 +112,31 @@ class RaftNode:
             self.match_index[self.node_id] = idx
             self.next_index[self.node_id] = idx + 1
 
-            event = threading.Event()
-            self._commit_events[idx] = event
+            waiter = {
+                "term": self.current_term,
+                "client_id": client_id,
+                "seq_num": seq_num,
+                "event": threading.Event(),
+                "result": None,
+            }
+            self._commit_waiters[idx] = waiter
 
         logger.info(f"[{self.node_id}] Appended entry idx={idx} op={op_type} "f"file={filename}")
 
         # Trigger immediate replication to all peers
         self._send_append_entries_all()
 
-        # Wait for commit
-        if not event.wait(timeout=timeout):
+        # Wait for THIS entry to commit. The waiter is resolved either by the
+        # applier (when our own entry commits at idx) or by _fail_all_waiters
+        # (when we lose leadership). We hold `waiter` by reference, so the result
+        # reaches us even after it is removed from the pending map.
+        if not waiter["event"].wait(timeout=timeout):
             with self.lock:
-                self._commit_events.pop(idx, None)
-                self._commit_results.pop(idx, None)
+                if self._commit_waiters.get(idx) is waiter:
+                    self._commit_waiters.pop(idx, None)
             raise TimeoutError(f"Entry {idx} not committed within {timeout}s")
 
-        with self.lock:
-            result = self._commit_results.pop(idx, None)
-
+        result = waiter["result"]
         if isinstance(result, Exception):
             raise result
         return result
@@ -470,6 +479,23 @@ class RaftNode:
         self.voted_for = None
         self._persist_hard_state()
         self._reset_election_timer()
+        # Once we are no longer leader we can neither guarantee nor observe the
+        # commit of entries we appended, so any pending client calls must fail and
+        # retry against the new leader rather than be told (falsely) they succeeded.
+        self._fail_all_waiters(NotLeaderError(None, None))
+
+    def _fail_all_waiters(self, exc: Exception):
+        """Resolve every pending client waiter with `exc` (call with self.lock held).
+
+        Invoked when we stop being leader: entries we appended may be overwritten
+        by a future leader, so we must not leave a client blocked on -- or later
+        signal success for -- a log slot that no longer holds its entry.
+        """
+        for waiter in self._commit_waiters.values():
+            if waiter["result"] is None:
+                waiter["result"] = exc
+            waiter["event"].set()
+        self._commit_waiters.clear()
 
     def _candidate_log_up_to_date(self, cand_last_idx: int,cand_last_term: int) -> bool:
         my_last_term = self._last_log_term()
@@ -511,10 +537,19 @@ class RaftNode:
                             result = e
 
                     with self.lock:
-                        ev = self._commit_events.pop(idx, None)
-                        if ev is not None:
-                            self._commit_results[idx] = result
-                            ev.set()
+                        waiter = self._commit_waiters.get(idx)
+                        if waiter is not None:
+                            # Only hand the result back to the caller if the entry
+                            # that actually committed at this index is the one they
+                            # appended. A mismatch means a new leader overwrote the
+                            # slot, so the caller's write was lost -> tell it to retry.
+                            same = (waiter["term"] == entry["term"] and
+                                    waiter["client_id"] == entry.get("client_id", "") and
+                                    waiter["seq_num"] == entry.get("seq_num", 0))
+                            waiter["result"] = result if same else NotLeaderError(
+                                self.leader_id, self.peers.get(self.leader_id))
+                            waiter["event"].set()
+                            self._commit_waiters.pop(idx, None)
 
         t = threading.Thread(target=applier_loop, daemon=True, name="raft-apply")
         t.start()
