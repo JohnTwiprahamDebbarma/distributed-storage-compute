@@ -1,4 +1,3 @@
-***Raft is also implemented as part of the replication but as recommended by Prof. Yuvi, I have not taken it further and went with Primary Backup as given in the child directory "./replication/".***
 
 ## 1. Run - Local (Same Machine)
 
