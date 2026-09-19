@@ -17,6 +17,7 @@ Usage:
 """
 
 import argparse
+import base64
 import json
 import logging
 import sys
@@ -31,7 +32,7 @@ import raft_pb2_grpc
 import kv_pb2
 import kv_pb2_grpc
 from raft_node import RaftNode, NotLeaderError
-from raft_server import RaftGRPCServicer, _build_peer_stubs  # reused Raft plumbing
+from raft_server import RaftGRPCServicer, _build_peer_stubs, abort_if_isolated  # reused Raft plumbing
 from kv_state_machine import KVStateMachine
 
 logging.basicConfig(
@@ -47,9 +48,9 @@ class RaftKVServicer(kv_pb2_grpc.KVServiceServicer):
     def __init__(self, raft: RaftNode, sm: KVStateMachine):
         self.raft = raft
         self.sm = sm
-        self.dedup = {}          # client_id -> (seq_num, response)
-        self.lock = threading.Lock()
-        # Committed entries flow into the state machine.
+        # Committed entries flow into the state machine. De-duplication of
+        # retried writes lives there too (a replicated session table), so unlike
+        # a per-node cache it survives leader failover.
         self.raft.apply_fn = self.sm.apply
 
     # Helpers
@@ -57,69 +58,44 @@ class RaftKVServicer(kv_pb2_grpc.KVServiceServicer):
         lid, addr = self.raft.get_leader_info()
         return f"NOT_LEADER:{lid}:{addr or ''}"
 
-    def _dedup_get(self, client_id, seq_num):
-        if not client_id or seq_num <= 0:
-            return None
-        with self.lock:
-            if client_id in self.dedup:
-                last_seq, resp = self.dedup[client_id]
-                if seq_num <= last_seq:
-                    return resp
-        return None
+    def _commit(self, op, key, data, request):
+        """Commit one write through the Raft log.
 
-    def _dedup_put(self, client_id, seq_num, response):
-        if client_id and seq_num > 0:
-            with self.lock:
-                self.dedup[client_id] = (seq_num, response)
+        Returns (result, error_message), exactly one of them set. A retry of a
+        write that already committed is answered from the replicated session
+        table instead of being appended again - on any node, even a new leader.
+        """
+        cached = self.sm.lookup_session(request.client_id, request.seq_num)
+        if cached is not None:
+            return cached, ""
+        if not self.raft.is_leader():
+            return None, self._redirect()
+        try:
+            result = self.raft.append_entry(
+                op, key, data, request.client_id, request.seq_num)
+            return result, ""
+        except NotLeaderError as e:
+            return None, f"NOT_LEADER:{e.leader_id}:{e.leader_address or ''}"
+        except Exception as e:
+            return None, str(e) or type(e).__name__
 
     # Mutations -> Raft log
     def Put(self, request, context):
-        cached = self._dedup_get(request.client_id, request.seq_num)
-        if cached is not None:
-            return cached
-        if not self.raft.is_leader():
-            return kv_pb2.PutResponse(success=False, error_message=self._redirect())
-        try:
-            result = self.raft.append_entry(
-                "put", request.key, request.value,
-                request.client_id, request.seq_num)
-            resp = kv_pb2.PutResponse(success=True, version=result.get("version", 0))
-            self._dedup_put(request.client_id, request.seq_num, resp)
-            return resp
-        except NotLeaderError as e:
-            return kv_pb2.PutResponse(
-                success=False,
-                error_message=f"NOT_LEADER:{e.leader_id}:{e.leader_address or ''}")
-        except Exception as e:
-            return kv_pb2.PutResponse(success=False, error_message=str(e))
+        abort_if_isolated(self.raft, context)
+        result, err = self._commit("put", request.key, request.value, request)
+        if err:
+            return kv_pb2.PutResponse(success=False, error_message=err)
+        return kv_pb2.PutResponse(success=True, version=result.get("version", 0))
 
     def Delete(self, request, context):
-        cached = self._dedup_get(request.client_id, request.seq_num)
-        if cached is not None:
-            return cached
-        if not self.raft.is_leader():
-            return kv_pb2.DeleteResponse(success=False, error_message=self._redirect())
-        try:
-            result = self.raft.append_entry(
-                "delete", request.key, b"",
-                request.client_id, request.seq_num)
-            resp = kv_pb2.DeleteResponse(success=True, existed=result.get("existed", False))
-            self._dedup_put(request.client_id, request.seq_num, resp)
-            return resp
-        except NotLeaderError as e:
-            return kv_pb2.DeleteResponse(
-                success=False,
-                error_message=f"NOT_LEADER:{e.leader_id}:{e.leader_address or ''}")
-        except Exception as e:
-            return kv_pb2.DeleteResponse(success=False, error_message=str(e))
+        abort_if_isolated(self.raft, context)
+        result, err = self._commit("delete", request.key, b"", request)
+        if err:
+            return kv_pb2.DeleteResponse(success=False, error_message=err)
+        return kv_pb2.DeleteResponse(success=True, existed=result.get("existed", False))
 
     def Cas(self, request, context):
-        cached = self._dedup_get(request.client_id, request.seq_num)
-        if cached is not None:
-            return cached
-        if not self.raft.is_leader():
-            return kv_pb2.CasResponse(success=False, error_message=self._redirect())
-        import base64
+        abort_if_isolated(self.raft, context)
         # The condition + new value travel together through one log entry, so the
         # compare-and-swap is evaluated atomically in the state machine at apply
         # time (it MUST go through the log - two clients cannot both win a CAS).
@@ -127,27 +103,20 @@ class RaftKVServicer(kv_pb2_grpc.KVServiceServicer):
             "expected": base64.b64encode(request.expected).decode(),
             "new": base64.b64encode(request.new_value).decode(),
             "expect_absent": request.expect_absent,
+            "expected_version": request.expected_version,
         }).encode()
-        try:
-            result = self.raft.append_entry(
-                "cas", request.key, cmd,
-                request.client_id, request.seq_num)
-            resp = kv_pb2.CasResponse(
-                success=True,
-                swapped=result.get("swapped", False),
-                current=result.get("current", b"") or b"",
-                version=result.get("version", 0))
-            self._dedup_put(request.client_id, request.seq_num, resp)
-            return resp
-        except NotLeaderError as e:
-            return kv_pb2.CasResponse(
-                success=False,
-                error_message=f"NOT_LEADER:{e.leader_id}:{e.leader_address or ''}")
-        except Exception as e:
-            return kv_pb2.CasResponse(success=False, error_message=str(e))
+        result, err = self._commit("cas", request.key, cmd, request)
+        if err:
+            return kv_pb2.CasResponse(success=False, error_message=err)
+        return kv_pb2.CasResponse(
+            success=True,
+            swapped=result.get("swapped", False),
+            current=result.get("current", b"") or b"",
+            version=result.get("version", 0))
 
     # Reads -> leader
     def Get(self, request, context):
+        abort_if_isolated(self.raft, context)
         # Reads are served by the leader. With linearizable=True we first commit a
         # no-op read barrier: it cannot commit without a current majority, which
         # proves this node is still leader and its applied state reflects every

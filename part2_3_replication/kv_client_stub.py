@@ -14,7 +14,8 @@ Example:
     client.put("city", "Kolkata")
     client.get("city")                       # b"Kolkata"
     client.cas("city", "Kolkata", "Delhi")   # True (compare-and-swap)
-    client.get("city", linearizable=True)    # b"Delhi"
+    client.cas_version("city", 2, "Mumbai")  # (True, 3): swap only at version 2
+    client.get("city", linearizable=True)    # b"Mumbai"
 """
 
 import time
@@ -142,6 +143,23 @@ class RaftKVClient:
                                 expect_absent=False,
                                 client_id=self.client_id, seq_num=self._next_seq())
         return self._execute("Cas", req).swapped
+
+    def cas_version(self, key: str, expected_version: int, new_value):
+        """Set key=new_value only if its current version == expected_version.
+
+        Returns (swapped, version): the new version if it swapped, otherwise the
+        key's current version (0 if absent). Unlike cas() this cannot be fooled
+        by a value that changed and then changed back (the ABA problem).
+        """
+        if expected_version <= 0:
+            raise ValueError("expected_version must be >= 1 (use put_if_absent for new keys)")
+        if isinstance(new_value, str):
+            new_value = new_value.encode("utf-8")
+        req = kv_pb2.CasRequest(key=key, new_value=new_value,
+                                expected_version=expected_version,
+                                client_id=self.client_id, seq_num=self._next_seq())
+        resp = self._execute("Cas", req)
+        return resp.swapped, resp.version
 
     def put_if_absent(self, key: str, value) -> bool:
         """Create key=value only if it is currently absent. Returns whether it was set."""

@@ -33,6 +33,16 @@ logging.basicConfig(
 logger = logging.getLogger("raft_server")
 
 
+def abort_if_isolated(raft: RaftNode, context):
+    """Fault injection: answer like an unreachable host while the node is isolated.
+
+    context.abort() raises, so the RPC handler that calls this stops here and the
+    caller sees UNAVAILABLE - the same error a crashed or partitioned node gives.
+    """
+    if raft.isolated:
+        context.abort(grpc.StatusCode.UNAVAILABLE, "node is isolated (fault injection)")
+
+
 # DSFS servicer - wraps RaftNode for client-facing operations
 class RaftDSFSServicer(fs_pb2_grpc.FileSystemServicer):
     """
@@ -126,11 +136,13 @@ class RaftDSFSServicer(fs_pb2_grpc.FileSystemServicer):
 
     # gRPC RPCs
     def TestVersionNumber(self, request, context):
+        abort_if_isolated(self.raft, context)
         with self.lock:
             version = self.file_versions.get(request.filename, 1)
         return fs_pb2.TestVersionResponse(version=version, success=True)
 
     def Create(self, request, context):
+        abort_if_isolated(self.raft, context)
         cached = self._check_idempotent(request.client_id, request.seq_num)
         if cached is not None:
             return cached
@@ -162,6 +174,7 @@ class RaftDSFSServicer(fs_pb2_grpc.FileSystemServicer):
                 file_handle=-1, success=False, error_message=str(e))
 
     def Open(self, request, context):
+        abort_if_isolated(self.raft, context)
         if request.mode not in ("r", "w"):
             return fs_pb2.OpenResponse(
                 file_handle=-1, success=False,
@@ -195,6 +208,7 @@ class RaftDSFSServicer(fs_pb2_grpc.FileSystemServicer):
                 file_handle=-1, success=False, error_message=str(e))
 
     def Close(self, request, context):
+        abort_if_isolated(self.raft, context)
         cached = self._check_idempotent(request.client_id, request.seq_num)
         if cached is not None:
             return cached
@@ -247,6 +261,7 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
         self.node_configs = node_configs  # list of {id, host, port}
 
     def RequestVote(self, request, context):
+        abort_if_isolated(self.raft, context)
         args = {
             "term": request.term,
             "candidate_id": request.candidate_id,
@@ -257,6 +272,7 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.RequestVoteReply(**reply)
 
     def AppendEntries(self, request, context):
+        abort_if_isolated(self.raft, context)
         entries = []
         for e in request.entries:
             entries.append({
@@ -280,6 +296,7 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.AppendEntriesReply(**reply)
 
     def InstallSnapshot(self, request, context):
+        abort_if_isolated(self.raft, context)
         args = {
             "term": request.term,
             "leader_id": request.leader_id,
@@ -291,6 +308,7 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.InstallSnapshotReply(**reply)
 
     def GetLeader(self, request, context):
+        abort_if_isolated(self.raft, context)
         lid, addr = self.raft.get_leader_info()
         if lid is None:
             return raft_pb2.GetLeaderReply(has_leader=False)
@@ -302,6 +320,23 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
                     break
         return raft_pb2.GetLeaderReply(
             leader_id=lid, leader_address=addr or "", has_leader=True)
+
+    # Admin RPCs - deliberately NOT blocked while isolated: they model an
+    # out-of-band management channel, so a dashboard can still watch (and heal)
+    # a node that the rest of the cluster cannot reach.
+    def GetStatus(self, request, context):
+        s = self.raft.status()
+        return raft_pb2.GetStatusReply(
+            node_id=s["node_id"], state=s["state"], term=s["term"],
+            has_leader=s["leader_id"] is not None,
+            leader_id=s["leader_id"] if s["leader_id"] is not None else 0,
+            commit_index=s["commit_index"], last_applied=s["last_applied"],
+            last_log_index=s["last_log_index"], last_log_term=s["last_log_term"],
+            isolated=s["isolated"], match_index=s["match_index"])
+
+    def SetIsolated(self, request, context):
+        self.raft.set_isolated(request.isolated, request.heal_after_seconds)
+        return raft_pb2.SetIsolatedReply(isolated=self.raft.isolated)
 
 
 # Bootstrap helpers

@@ -67,6 +67,11 @@ class RaftNode:
         # gRPC stubs (populated lazily by raft_server.py)
         self.peer_stubs = {}   # {peer_id: RaftServiceStub}
 
+        # Fault injection: while isolated this node neither sends nor accepts
+        # Raft traffic, as if its network cable were pulled (see set_isolated)
+        self.isolated = False
+        self._heal_timer = None
+
         # Restore durable state then start timers
         self._load_persistent_state()
         self._start_applier()
@@ -87,6 +92,40 @@ class RaftNode:
             return lid, None   # caller knows own address
         addr = self.peers.get(lid)
         return lid, addr
+
+    def status(self) -> dict:
+        """A consistent snapshot of this node's Raft state (dashboards, tests)."""
+        with self.lock:
+            return {
+                "node_id": self.node_id,
+                "state": self.state,
+                "term": self.current_term,
+                "leader_id": self.leader_id,
+                "commit_index": self.commit_index,
+                "last_applied": self.last_applied,
+                "last_log_index": self._last_log_index(),
+                "last_log_term": self._last_log_term(),
+                "isolated": self.isolated,
+                "match_index": dict(self.match_index) if self.state == self.LEADER else {},
+            }
+
+    def set_isolated(self, isolated: bool, heal_after: float = 0.0):
+        """Cut this node off from the cluster (fault injection), or reconnect it.
+
+        While isolated the node drops every outgoing Raft RPC, and the gRPC layer
+        rejects incoming ones, so the rest of the cluster sees it as crashed even
+        though it keeps running. heal_after > 0 reconnects it automatically.
+        """
+        with self.lock:
+            self.isolated = isolated
+            if self._heal_timer is not None:
+                self._heal_timer.cancel()
+                self._heal_timer = None
+            if isolated and heal_after > 0:
+                self._heal_timer = threading.Timer(heal_after, self.set_isolated, args=(False,))
+                self._heal_timer.daemon = True
+                self._heal_timer.start()
+        logger.info(f"[{self.node_id}] {'ISOLATED' if isolated else 'Reconnected'}")
 
     def append_entry(self, op_type: str, filename: str, data: bytes,
                      client_id: str, seq_num: int, timeout: float = 10.0):
@@ -302,6 +341,8 @@ class RaftNode:
 
         def request_vote_from(peer_id, stub):
             nonlocal votes
+            if self.isolated:
+                return   # fault injection: the request never leaves this node
             try:
                 import raft_pb2
                 req = raft_pb2.RequestVoteArgs(
@@ -390,10 +431,10 @@ class RaftNode:
             t.start()
 
     def _send_append_entries_to(self, peer_id: int, stub):
-        import raft_pb2
-
         with self.lock:
-            if self.state != self.LEADER:
+            # An isolated leader keeps believing it leads, but its heartbeats and
+            # entries never arrive, so the followers time out and elect a new one.
+            if self.state != self.LEADER or self.isolated:
                 return
             next_idx  = self.next_index.get(peer_id, 1)
             prev_idx  = next_idx - 1
@@ -401,6 +442,8 @@ class RaftNode:
             entries= self.log[prev_idx:]    # everything from next_idx
             commit = self.commit_index
             term = self.current_term
+
+        import raft_pb2
 
         # Build protobuf entries
         pb_entries = []

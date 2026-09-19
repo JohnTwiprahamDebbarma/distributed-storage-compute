@@ -29,8 +29,13 @@ I named it *Many-As-One* because that is the core idea — replication and conse
   fast conflict backtracking, persistence, snapshot install) and a leaner **primary-backup**
   cluster with failover and re-sync.
 - I reused the Raft engine to build a **key-value store (mini-etcd)**: linearizable
-  `Put`/`Delete`/compare-and-swap, leader-served reads with an optional ReadIndex barrier,
-  and idempotent retries that survive failover.
+  `Put`/`Delete`/compare-and-swap (by value, or by version to rule out the ABA problem),
+  leader-served reads with an optional ReadIndex barrier, and **exactly-once retries that
+  survive failover** — the de-duplication table is part of the replicated state machine, so
+  a new leader recognises a write its predecessor already committed.
+- Every node exposes a **status RPC** (role, term, commit index, per-follower replication
+  progress) and a **fault-injection switch** that cuts it off from the cluster; my tests use
+  it to isolate the leader and prove a retried write is still applied exactly once.
 - On top of all that I built a **distributed ML trainer** — data-parallel logistic
   regression (a parameter server) whose model I checkpoint into the Raft KV store, so
   training resumes after a coordinator crash.
@@ -116,8 +121,9 @@ bash generate_proto.sh
 cd ..                                # Raft + the KV store (mini-etcd)
 ./setup_raft.sh
 python3 test_raft_commit_safety.py             # hermetic Raft regression test (no cluster)
+python3 test_raft_status_isolation.py          # hermetic status + fault-injection tests
 ./start_kv_cluster.sh                          # 3-node KV store on :50051-:50053
-python test_kv_cluster.py                      # functional + automated leader-failover test
+python test_kv_cluster.py                      # functional, exactly-once and failover tests
 python3 test_kv_state_machine.py               # hermetic KV state-machine tests
 ```
 
@@ -147,10 +153,10 @@ See [`DesignDoc_P45.md`](DesignDoc_P45.md) for the training design.
 | Component | Guarantee | Boundary / known trade-off |
 |---|---|---|
 | **File system** | Close-to-open consistency; commit-on-close; version-validated client cache | Concurrent writers are last-writer-wins (whole-file overwrite) |
-| **Retries + dedup** | At-least-once delivery + `(client_id, seq_num)` dedup → effectively at-most-once on a stable leader | Dedup state is per-node and not replicated across failover |
+| **File-system retries + dedup** | At-least-once delivery + `(client_id, seq_num)` dedup → effectively at-most-once on a stable leader | The file system's dedup state is per-node and not replicated across failover (the KV store's is) |
 | **Primary-backup** | Stays available through a single-node failure; any replica serves reads; transparent client redirect on failover | Acked-write durability needs a write quorum; split-brain possible without fencing (future work) |
 | **Raft engine** | Linearizable replicated log; leader election; crash-durable term/log; snapshot install | See engineering note below |
-| **Raft KV store** | Linearizable `Put`/`Delete`/CAS through the log; leader-served reads with optional ReadIndex barrier | Dedup not replicated across failover; no log compaction yet |
+| **Raft KV store** | Linearizable `Put`/`Delete`/CAS (by value or version) through the log; exactly-once retries across failover via a replicated session table; leader-served reads with optional ReadIndex barrier | No log compaction yet; no PreVote, so a rejoining isolated node forces one extra election |
 | **ML trainer** | Data-parallel bulk-synchronous SGD; model checkpointed to the replicated KV store, so training resumes after a coordinator crash | One coordinator process at a time; synchronous (a straggler slows the epoch) |
 
 ---
@@ -173,8 +179,9 @@ a hermetic regression test that reproduces the exact interleaving without a netw
   closes this.
 - *Split-brain fencing:* primaries never step down and RPCs carry no epoch, so a stalled-then-
   resumed primary can coexist with a newly elected one. Monotonic epoch/fencing tokens fix this.
-- *Idempotency across failover:* the dedup cache should live in the replicated state machine
-  so a retried write is deduplicated after a leader change.
+- *Idempotency across failover (file system):* done for the KV store, whose de-duplication
+  table now lives in the replicated state machine; the file-system build still keeps its
+  cache per node and would get the same fix.
 
 ---
 

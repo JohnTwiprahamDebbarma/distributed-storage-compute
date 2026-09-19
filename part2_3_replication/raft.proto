@@ -8,6 +8,9 @@ service RaftService {
   rpc AppendEntries   (AppendEntriesArgs)    returns (AppendEntriesReply)   {}
   rpc InstallSnapshot (InstallSnapshotArgs)  returns (InstallSnapshotReply) {}
   rpc GetLeader       (GetLeaderRequest)     returns (GetLeaderReply)       {}
+  // Admin: observability + fault injection (answered even while isolated)
+  rpc GetStatus       (GetStatusRequest)     returns (GetStatusReply)       {}
+  rpc SetIsolated     (SetIsolatedRequest)   returns (SetIsolatedReply)     {}
 }
 
 // Log entry (one replicated command) 
@@ -72,4 +75,32 @@ message GetLeaderReply {
   int32  leader_id      = 1;
   string leader_address = 2;   // "host:port"
   bool   has_leader     = 3;
+}
+
+// Node status (dashboards, tests)
+message GetStatusRequest {}
+
+message GetStatusReply {
+  int32  node_id        = 1;
+  string state          = 2;   // "follower" | "candidate" | "leader"
+  int64  term           = 3;
+  bool   has_leader     = 4;
+  int32  leader_id      = 5;   // valid only when has_leader
+  int64  commit_index   = 6;
+  int64  last_applied   = 7;
+  int64  last_log_index = 8;
+  int64  last_log_term  = 9;
+  bool   isolated       = 10;
+  map<int32, int64> match_index = 11;   // leader only: highest index replicated per node
+}
+
+// Fault injection: an isolated node drops all Raft and client traffic, as if
+// its network cable were pulled, but still answers GetStatus / SetIsolated.
+message SetIsolatedRequest {
+  bool   isolated           = 1;
+  double heal_after_seconds = 2;   // > 0: reconnect automatically after this long
+}
+
+message SetIsolatedReply {
+  bool isolated = 1;
 }

@@ -51,12 +51,13 @@ message DeleteResponse {
 }
 
 message CasRequest {
-  string key           = 1;
-  bytes  expected      = 2;   // required current value (ignored if expect_absent)
-  bytes  new_value     = 3;
-  bool   expect_absent = 4;   // if true, apply only when the key is currently absent
-  string client_id     = 5;
-  int64  seq_num       = 6;
+  string key              = 1;
+  bytes  expected         = 2;   // required current value (ignored if expect_absent or expected_version > 0)
+  bytes  new_value        = 3;
+  bool   expect_absent    = 4;   // if true, apply only when the key is currently absent
+  string client_id        = 5;
+  int64  seq_num          = 6;
+  int64  expected_version = 7;   // if > 0, apply only when the key's current version equals this
 }
 message CasResponse {
   bool   success       = 1;   // request handled by the leader (not a redirect)
