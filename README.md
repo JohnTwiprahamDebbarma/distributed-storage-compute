@@ -1,18 +1,20 @@
 # Many-As-One — Distributed Storage & Compute Stack
 
 A from-scratch distributed systems project I built in **Python + gRPC / Protocol Buffers**.
-It spans the storage, consensus, and compute layers of a distributed system: a replicated
-file system with client-side caching, two replication strategies (primary-backup and Raft),
-a Raft-backed key-value store, and a fault-tolerant data-parallel ML trainer that runs on
-top of them.
+It spans the storage, consensus, compute and web layers of a distributed system: a
+replicated file system with client-side caching, two replication strategies (primary-backup
+and Raft), a Raft-backed key-value store, a fault-tolerant data-parallel ML trainer that
+runs on top of them, and a REST API that serves the store over HTTP.
 
 I named it *Many-As-One* because that is the core idea — replication and consensus make
 **many** independent machines behave as **one** consistent system.
 
-> **Tech:** Python, gRPC, Protocol Buffers, threading, `cryptography` (Fernet), Make.
+> **Tech:** Python, gRPC, Protocol Buffers, FastAPI, Pydantic, WebSockets, threading,
+> `cryptography` (Fernet), Make.
 > **Concepts:** RPC, client caching & cache coherence, idempotent retries, leader election,
 > log replication (Raft), primary-backup replication, linearizability, snapshotting,
-> data-parallel SGD / parameter server.
+> data-parallel SGD / parameter server, REST API design (ETags, conditional requests,
+> idempotency keys).
 
 ---
 
@@ -36,6 +38,11 @@ I named it *Many-As-One* because that is the core idea — replication and conse
 - Every node exposes a **status RPC** (role, term, commit index, per-follower replication
   progress) and a **fault-injection switch** that cuts it off from the cluster; my tests use
   it to isolate the leader and prove a retried write is still applied exactly once.
+- I put the store on the web with a **REST API (FastAPI)**: a key's version becomes its
+  `ETag`, compare-and-swap becomes `If-Match` (optimistic concurrency, `412` on a conflict),
+  retries carry an `Idempotency-Key`, and leader failover happens inside the gateway, so an
+  HTTP client sees a slower response instead of an error. Errors are RFC 9457 problem
+  details, and a WebSocket streams live cluster status.
 - On top of all that I built a **distributed ML trainer** — data-parallel logistic
   regression (a parameter server) whose model I checkpoint into the Raft KV store, so
   training resumes after a coordinator crash.
@@ -53,6 +60,7 @@ I named it *Many-As-One* because that is the core idea — replication and conse
 | `part2_3_replication/` | Raft engine (`raft_node.py`), Raft KV store / mini-etcd (`raft_kv_server.py`, `KV.md`), and the fault-tolerance client |
 | `part2_3_replication/replication/` | Primary-backup cluster + 32-test suite |
 | `part4_5_compute/` | Distributed data-parallel ML trainer (parameter server) with model checkpointing |
+| `part6_web/` | REST API gateway (FastAPI): controller, service and gRPC-client layers, plus hermetic and live tests |
 | `DesignDoc_P*.md` | Per-part design documents |
 
 > The storage parts build incrementally, so the shared file-system client (`client_stub.py`,
@@ -82,6 +90,12 @@ graph TB
         P <-->|"replication + heartbeats"| B2
     end
 
+    subgraph Web["Web layer (Part 6)"]
+        GW["REST gateway<br/>(FastAPI)"]
+    end
+
+    U["HTTP clients<br/>(curl, browser)"] -->|"JSON, ETags,<br/>Idempotency-Key"| GW
+    GW -->|"gRPC, follows<br/>the leader"| P
     CO -->|"checkpoint model<br/>(Raft KV store)"| P
     P --- D1["files / key-value store"]
     P --- D2["Raft log + snapshots"]
@@ -146,6 +160,18 @@ make run-coordinator-kv WORKERS=3
 
 See [`DesignDoc_P45.md`](DesignDoc_P45.md) for the training design.
 
+### Part 6 — Web gateway (REST API)
+
+```bash
+pip install -r part6_web/requirements.txt
+cd part6_web                         # with the KV store running on :50051-:50053 (Parts 2 & 3)
+fastapi dev gateway/main.py          # http://127.0.0.1:8000/docs
+python test_gateway_api.py           # 28 hermetic tests (no cluster needed)
+python test_gateway_live.py          # end to end: failover and loss of majority, over HTTP
+```
+
+See [`part6_web/README.md`](part6_web/README.md) for the API, the status codes and the design.
+
 ---
 
 ## Consistency & fault-tolerance guarantees
@@ -158,6 +184,7 @@ See [`DesignDoc_P45.md`](DesignDoc_P45.md) for the training design.
 | **Raft engine** | Linearizable replicated log; leader election; crash-durable term/log; snapshot install | See engineering note below |
 | **Raft KV store** | Linearizable `Put`/`Delete`/CAS (by value or version) through the log; exactly-once retries across failover via a replicated session table; leader-served reads with optional ReadIndex barrier | No log compaction yet; no PreVote, so a rejoining isolated node forces one extra election |
 | **ML trainer** | Data-parallel bulk-synchronous SGD; model checkpointed to the replicated KV store, so training resumes after a coordinator crash | One coordinator process at a time; synchronous (a straggler slows the epoch) |
+| **Web API** | ETag / `If-Match` optimistic concurrency; a write is applied at most once per `Idempotency-Key`, even across failover; failover handled within a 12 s request deadline; `503` = not applied, `504` = outcome unknown | No authentication or rate limiting yet; `DELETE` has no `If-Match` |
 
 ---
 

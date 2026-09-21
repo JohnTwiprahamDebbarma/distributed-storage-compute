@@ -1,0 +1,5 @@
+# Web gateway. It also needs the core requirements in ../requirements.txt (gRPC).
+# [standard] brings the `fastapi` command and uvicorn with WebSocket support;
+# httpx2 is what FastAPI's TestClient uses in the tests.
+fastapi[standard]>=0.115
+httpx2>=2.0
