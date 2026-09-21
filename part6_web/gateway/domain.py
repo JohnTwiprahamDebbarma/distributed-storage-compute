@@ -1,9 +1,9 @@
 """
 Plain data types and errors shared by every layer of the gateway.
 
-Nothing here knows about HTTP or gRPC, so the service layer (and its tests) can
-be written against these types alone. api/problems.py maps each error to an
-HTTP status code.
+I keep HTTP and gRPC out of this module so the service layer (and its tests)
+can be written against these types alone. api/problems.py maps each error to
+an HTTP status code.
 """
 
 from dataclasses import dataclass, field

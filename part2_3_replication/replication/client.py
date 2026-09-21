@@ -28,7 +28,7 @@ def run_tests(servers: list):
 
     client = ReplicatedDSFSClientStub(server_addresses=servers, cache_dir="./repl_cache")
 
-    # Test 1 – Create a file on the primary
+    # Test 1 - Create a file on the primary
     print("\n[Test 1] Create file")
     try:
         fh = client.create("test_repl.txt")
@@ -36,7 +36,7 @@ def run_tests(servers: list):
     except Exception as e:
         check("Create succeeded", False, str(e))
 
-    # Test 2 – Open for write and close (flush to server + replicas)
+    # Test 2 - Open for write and close (flush to server + replicas)
     print("\n[Test 2] Open-write-close")
     try:
         fh = client.open("test_repl.txt", mode="w")
@@ -47,7 +47,7 @@ def run_tests(servers: list):
     except Exception as e:
         check("Write-close succeeded", False, str(e))
 
-    # Test 3 – Open for read and verify data
+    # Test 3 - Open for read and verify data
     print("\n[Test 3] Open-read-verify")
     try:
         fh   = client.open("test_repl.txt", mode="r")
@@ -58,7 +58,7 @@ def run_tests(servers: list):
     except Exception as e:
         check("Read succeeded", False, str(e))
 
-    # Test 4 – Cache hit (second open should not fetch)
+    # Test 4 - Cache hit (second open should not fetch)
     print("\n[Test 4] Cache hit")
     try:
         fh   = client.open("test_repl.txt", mode="r")
@@ -68,7 +68,7 @@ def run_tests(servers: list):
     except Exception as e:
         check("Cache hit", False, str(e))
 
-    # Test 5 – Version increment after write
+    # Test 5 - Version increment after write
     print("\n[Test 5] Version increments")
     try:
         v_before = client.test_version_number("test_repl.txt")
@@ -81,7 +81,7 @@ def run_tests(servers: list):
     except Exception as e:
         check("Version increment", False, str(e))
 
-    # Test 6 – Cache miss after version change
+    # Test 6 - Cache miss after version change
     print("\n[Test 6] Cache miss after remote write")
     try:
         # A second client simulates a different process
@@ -100,11 +100,11 @@ def run_tests(servers: list):
     except Exception as e:
         check("Cache miss after remote write", False, str(e))
 
-    # Test 7 – Replica failover (manual step)
-    print(f"\n[Test 7] Fault tolerance – primary failover")
+    # Test 7 - Replica failover (manual step)
+    print(f"\n[Test 7] Fault tolerance - primary failover")
     print("  ACTION REQUIRED: Kill the PRIMARY server process, then press Enter.")
     print(f"  Primary is currently: {client._primary_addr}")
-    input("  Press Enter to continue … ")
+    input("  Press Enter to continue ... ")
 
     try:
         # Rediscover primary
@@ -125,9 +125,9 @@ def run_tests(servers: list):
     except Exception as e:
         check("Failover read/write", False, str(e))
 
-    # Test 8 – Recovered server catches up (manual step)
-    print(f"\n[Test 8] Recovery – restart the killed server, then press Enter.")
-    input("  Press Enter after restarting … ")
+    # Test 8 - Recovered server catches up (manual step)
+    print(f"\n[Test 8] Recovery - restart the killed server, then press Enter.")
+    input("  Press Enter after restarting ... ")
     time.sleep(8)  # Give it time to sync
 
     try:

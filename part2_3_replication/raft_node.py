@@ -166,9 +166,9 @@ class RaftNode:
         self._send_append_entries_all()
 
         # Wait for THIS entry to commit. The waiter is resolved either by the
-        # applier (when our own entry commits at idx) or by _fail_all_waiters
-        # (when we lose leadership). We hold `waiter` by reference, so the result
-        # reaches us even after it is removed from the pending map.
+        # applier (when this node's own entry commits at idx) or by
+        # _fail_all_waiters (when this node loses leadership). I hold `waiter` by
+        # reference so its result still arrives after it leaves the pending map.
         if not waiter["event"].wait(timeout=timeout):
             with self.lock:
                 if self._commit_waiters.get(idx) is waiter:
@@ -188,7 +188,7 @@ class RaftNode:
             last_log_idx = args["last_log_index"]
             last_log_term= args["last_log_term"]
 
-            # If we see a higher term, revert to follower
+            # On seeing a higher term, revert to follower
             if term > self.current_term:
                 self._become_follower(term)
 
@@ -234,7 +234,7 @@ class RaftNode:
             # Check prev log consistency
             if prev_idx > 0:
                 if self._last_log_index() < prev_idx:
-                    # We are missing entries
+                    # This node is missing entries
                     conflict_index = self._last_log_index() + 1
                     return {"term": self.current_term, "success": False,"conflict_index": conflict_index,"conflict_term": 0}
 
@@ -486,7 +486,7 @@ class RaftNode:
                 ci = reply.conflict_index
                 ct = reply.conflict_term
                 if ct > 0:
-                    # Find last entry in our log with conflict_term
+                    # Find the last entry in this node's log with conflict_term
                     found = 0
                     for i in range(len(self.log) - 1, -1, -1):
                         if self.log[i]["term"] == ct:
@@ -522,17 +522,18 @@ class RaftNode:
         self.voted_for = None
         self._persist_hard_state()
         self._reset_election_timer()
-        # Once we are no longer leader we can neither guarantee nor observe the
-        # commit of entries we appended, so any pending client calls must fail and
-        # retry against the new leader rather than be told (falsely) they succeeded.
+        # Once this node is no longer leader it can neither guarantee nor observe
+        # the commit of entries it appended, so I fail any pending client calls:
+        # they retry against the new leader instead of being told (falsely) that
+        # they succeeded.
         self._fail_all_waiters(NotLeaderError(None, None))
 
     def _fail_all_waiters(self, exc: Exception):
         """Resolve every pending client waiter with `exc` (call with self.lock held).
 
-        Invoked when we stop being leader: entries we appended may be overwritten
-        by a future leader, so we must not leave a client blocked on -- or later
-        signal success for -- a log slot that no longer holds its entry.
+        Invoked when this node stops being leader: entries it appended may be
+        overwritten by a future leader, so no client may be left blocked on -- or
+        later told it succeeded for -- a log slot that no longer holds its entry.
         """
         for waiter in self._commit_waiters.values():
             if waiter["result"] is None:

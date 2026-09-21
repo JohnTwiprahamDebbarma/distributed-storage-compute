@@ -29,7 +29,7 @@ import kv_pb2_grpc
 
 class RaftKVClient:
     def __init__(self, nodes: list, max_retries: int = 5, timeout: float = 10.0):
-        self.nodes = list(nodes)          # [(host, port), …]
+        self.nodes = list(nodes)          # [(host, port), ...]
         self.max_retries = max_retries
         self.timeout = timeout
 

@@ -1,4 +1,4 @@
-# ── Python ──────────────────────────────────────────────
+# --- Python ---
 __pycache__/
 *.py[cod]
 *.egg-info/
@@ -7,12 +7,12 @@ venv/
 */venv/
 */*/venv/
 
-# ── Generated gRPC / protobuf stubs ─────────────────────
+# --- Generated gRPC / protobuf stubs ---
 # Regenerate with `make proto` (or setup_raft.sh / generate_proto.sh).
 *_pb2.py
 *_pb2_grpc.py
 
-# ── Runtime data, caches, snapshots, logs ───────────────
+# --- Runtime data, caches, snapshots, logs ---
 server_data/
 server_data_node*/
 data_5*/
@@ -32,9 +32,9 @@ kvlog*.txt
 ml_data/
 model.json
 
-# ── OS / editor / tooling ───────────────────────────────
+# --- OS / editor / tooling ---
 .DS_Store
 .qodo/
 
-# ── Prepared push copy (its own standalone git repo) ────
+# --- Prepared push copy (its own standalone git repo) ---
 distributed-storage-compute/

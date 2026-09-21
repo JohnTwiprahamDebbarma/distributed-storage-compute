@@ -5,7 +5,7 @@
 set -e
 cd "$(dirname "$0")"
 
-# Clean up old data directories (we can comment this out to persist across runs)
+# Clean up old data directories (comment this out to keep data across runs)
 rm -rf data_50050 data_50051 data_50052
 
 # Populate the primary's data directory with input files if they exist

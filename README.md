@@ -1,4 +1,4 @@
-# Many-As-One — Distributed Storage & Compute Stack
+# Many-As-One: Distributed Storage & Compute Stack
 
 A from-scratch distributed systems project I built in **Python + gRPC / Protocol Buffers**.
 It spans the storage, consensus, compute and web layers of a distributed system: a
@@ -6,7 +6,7 @@ replicated file system with client-side caching, two replication strategies (pri
 and Raft), a Raft-backed key-value store, a fault-tolerant data-parallel ML trainer that
 runs on top of them, and a REST API that serves the store over HTTP.
 
-I named it *Many-As-One* because that is the core idea — replication and consensus make
+I named it *Many-As-One* because that is the core idea: replication and consensus make
 **many** independent machines behave as **one** consistent system.
 
 > **Tech:** Python, gRPC, Protocol Buffers, FastAPI, Pydantic, WebSockets, threading,
@@ -20,9 +20,9 @@ I named it *Many-As-One* because that is the core idea — replication and conse
 
 ## Highlights
 
-- I built **two RPC layers by hand** — a gRPC file service *and* an equivalent
-  length-prefixed, encrypted TCP transport (pickle + Fernet) — so the caching/versioning
-  logic is transport-agnostic.
+- I built **two RPC layers by hand**: a gRPC file service *and* an equivalent
+  length-prefixed, encrypted TCP transport (pickle + Fernet). Having both keeps the
+  caching/versioning logic transport-agnostic.
 - My file system gives **close-to-open consistency** with a version-validated client cache:
   unchanged files are served from local cache with zero network transfer, and writes commit
   atomically on `close`.
@@ -33,7 +33,7 @@ I named it *Many-As-One* because that is the core idea — replication and conse
 - I reused the Raft engine to build a **key-value store (mini-etcd)**: linearizable
   `Put`/`Delete`/compare-and-swap (by value, or by version to rule out the ABA problem),
   leader-served reads with an optional ReadIndex barrier, and **exactly-once retries that
-  survive failover** — the de-duplication table is part of the replicated state machine, so
+  survive failover**: the de-duplication table is part of the replicated state machine, so
   a new leader recognises a write its predecessor already committed.
 - Every node exposes a **status RPC** (role, term, commit index, per-follower replication
   progress) and a **fault-injection switch** that cuts it off from the cluster; my tests use
@@ -43,7 +43,7 @@ I named it *Many-As-One* because that is the core idea — replication and conse
   retries carry an `Idempotency-Key`, and leader failover happens inside the gateway, so an
   HTTP client sees a slower response instead of an error. Errors are RFC 9457 problem
   details, and a WebSocket streams live cluster status.
-- On top of all that I built a **distributed ML trainer** — data-parallel logistic
+- On top of all that I built a **distributed ML trainer**: data-parallel logistic
   regression (a parameter server) whose model I checkpoint into the Raft KV store, so
   training resumes after a coordinator crash.
 - I found and fixed a real **lost-write linearizability bug** in my Raft commit path, with a
@@ -65,8 +65,8 @@ I named it *Many-As-One* because that is the core idea — replication and conse
 
 > The storage parts build incrementally, so the shared file-system client (`client_stub.py`,
 > `client.py`) recurs in a couple of folders and `fs.proto` diverges between the simple
-> Part 1 version and the idempotent Parts 2–3 version. This is deliberate — each part runs
-> on its own — rather than a single shared package.
+> Part 1 version and the idempotent Parts 2-3 version. This is deliberate (each part runs
+> on its own) rather than a single shared package.
 
 ---
 
@@ -111,10 +111,10 @@ graph TB
 pip install -r requirements.txt
 ```
 
-gRPC stubs (`*_pb2.py`) are **generated**, not committed — each part has a `make proto`
+gRPC stubs (`*_pb2.py`) are **generated**, not committed: each part has a `make proto`
 (or `setup_raft.sh` / `generate_proto.sh`) step shown below.
 
-### Part 1 — File system
+### Part 1: File system
 
 ```bash
 cd part1_filesystem/fs
@@ -124,7 +124,7 @@ make run-client                      # in another terminal
 cd ../fs_wo_grpc && make install-deps && make run-server
 ```
 
-### Parts 2 & 3 — Fault tolerance, replication, and the KV store
+### Parts 2 & 3: Fault tolerance, replication, and the KV store
 
 ```bash
 cd part2_3_replication/replication   # primary-backup cluster + 32-test suite
@@ -144,7 +144,7 @@ python3 test_kv_state_machine.py               # hermetic KV state-machine tests
 See [`part2_3_replication/KV.md`](part2_3_replication/KV.md) for the KV store's API and
 consistency model.
 
-### Part 4 & 5 — Distributed ML training
+### Parts 4 & 5: Distributed ML training
 
 ```bash
 cd part4_5_compute
@@ -160,7 +160,7 @@ make run-coordinator-kv WORKERS=3
 
 See [`DesignDoc_P45.md`](DesignDoc_P45.md) for the training design.
 
-### Part 6 — Web gateway (REST API)
+### Part 6: Web gateway (REST API)
 
 ```bash
 pip install -r part6_web/requirements.txt
@@ -179,7 +179,7 @@ See [`part6_web/README.md`](part6_web/README.md) for the API, the status codes a
 | Component | Guarantee | Boundary / known trade-off |
 |---|---|---|
 | **File system** | Close-to-open consistency; commit-on-close; version-validated client cache | Concurrent writers are last-writer-wins (whole-file overwrite) |
-| **File-system retries + dedup** | At-least-once delivery + `(client_id, seq_num)` dedup → effectively at-most-once on a stable leader | The file system's dedup state is per-node and not replicated across failover (the KV store's is) |
+| **File-system retries + dedup** | At-least-once delivery + `(client_id, seq_num)` dedup -> effectively at-most-once on a stable leader | The file system's dedup state is per-node and not replicated across failover (the KV store's is) |
 | **Primary-backup** | Stays available through a single-node failure; any replica serves reads; transparent client redirect on failover | Acked-write durability needs a write quorum; split-brain possible without fencing (future work) |
 | **Raft engine** | Linearizable replicated log; leader election; crash-durable term/log; snapshot install | See engineering note below |
 | **Raft KV store** | Linearizable `Put`/`Delete`/CAS (by value or version) through the log; exactly-once retries across failover via a replicated session table; leader-served reads with optional ReadIndex barrier | No log compaction yet; no PreVote, so a rejoining isolated node forces one extra election |
@@ -206,9 +206,9 @@ a hermetic regression test that reproduces the exact interleaving without a netw
   closes this.
 - *Split-brain fencing:* primaries never step down and RPCs carry no epoch, so a stalled-then-
   resumed primary can coexist with a newly elected one. Monotonic epoch/fencing tokens fix this.
-- *Idempotency across failover (file system):* done for the KV store, whose de-duplication
-  table now lives in the replicated state machine; the file-system build still keeps its
-  cache per node and would get the same fix.
+- *Idempotency across failover (file system):* I've done this for the KV store, whose
+  de-duplication table now lives in the replicated state machine; the file-system build
+  still keeps its cache per node and needs the same fix.
 
 ---
 

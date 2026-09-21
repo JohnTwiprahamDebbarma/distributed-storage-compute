@@ -8,7 +8,7 @@ cd fs/
 chmod +x setup_raft.sh start_cluster.sh stop_cluster.sh
 ./setup_raft.sh
 ```
-- Please note that here `fs` means File System (Part 1). In this repository the code for Parts 2-3 lives in the `part2_3_replication/` directory.
+- Here `fs` means File System (Part 1). In this repository the code for Parts 2-3 lives in the `part2_3_replication/` directory.
 
 This installs `grpcio`, `grpcio-tools`, and generates `raft_pb2.py` /
 `raft_pb2_grpc.py` from `raft.proto`.
@@ -24,7 +24,7 @@ cp input.txt server_data_node1/
 cp input.txt server_data_node2/
 ```
 
-*(Or just place them in `server_data_node0/`; after the first write the leader
+*(Or place them in `server_data_node0/`; after the first write the leader
 will propagate to followers automatically.)*
 
 ### Step 3 - Start the cluster

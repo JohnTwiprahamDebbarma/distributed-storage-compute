@@ -20,7 +20,7 @@ THE FIX
 -------
 Tag each waiter with the identity (term, client_id, seq_num) of the entry the
 caller appended, and:
-  * when we stop being leader (`_become_follower`), fail every pending waiter
+  * when the node stops being leader (`_become_follower`), fail every pending waiter
     with NotLeaderError so the client retries against the new leader; and
   * before handing a result back in the applier, confirm the entry that
     actually committed at that index is the caller's own.

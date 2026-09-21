@@ -27,7 +27,7 @@ from pathlib import Path
 import grpc
 
 # The KV client lives in ../part2_3_replication; append (don't insert) so nothing
-# here shadows that package. Optional: absent it, we fall back to a local file.
+# here shadows that package. Optional: without it, the coordinator falls back to a local file.
 _KV_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "part2_3_replication"))
 if _KV_DIR not in sys.path:
     sys.path.append(_KV_DIR)

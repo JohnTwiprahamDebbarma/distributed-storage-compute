@@ -12,7 +12,7 @@ os.makedirs(CLIENT_CACHE_DIR, exist_ok=True)
 class RaftDSFSClientStub:
     def __init__(self, nodes: list, max_retries: int = 5,
                  cache_dir: str = CLIENT_CACHE_DIR):
-        self.nodes= list(nodes)          # [(host, port), …]
+        self.nodes= list(nodes)          # [(host, port), ...]
         self.max_retries = max_retries
         self.cache_dir = cache_dir
         self.timeout= 10.0
@@ -60,7 +60,7 @@ class RaftDSFSClientStub:
         last_error = None
         for attempt in range(self.max_retries + 1):
             try:
-                # Re-bind on every attempt so that after a redirect/reconnect we always call through the current (live) stub, not a bound method captured from a now-closed channel.
+                # Re-bind on every attempt so that after a redirect/reconnect each call goes through the current (live) stub, not a bound method captured from a now-closed channel.
                 rpc_call = getattr(self.stub, method_name)
                 response = rpc_call(request, timeout=self.timeout)
 
@@ -75,7 +75,7 @@ class RaftDSFSClientStub:
                             print(f"####[REDIRECT] Connecting to leader at {leader_addr}")
                             self._connect_to_address(leader_addr)
                         else:
-                            print("####[REDIRECT] No leader address, round-robining…")
+                            print("####[REDIRECT] No leader address, round-robining...")
                             self._next_node()
                         time.sleep(0.5)
                         continue
@@ -91,7 +91,7 @@ class RaftDSFSClientStub:
                                  grpc.StatusCode.ABORTED):
                     backoff = min(2 ** attempt, 8)
                     print(f"####[RETRY {attempt+1}/{self.max_retries}] "
-                          f"{e.code()} - switching node, retrying in {backoff}s…")
+                          f"{e.code()} - switching node, retrying in {backoff}s...")
                     self._next_node()
                     time.sleep(backoff)
                 else:

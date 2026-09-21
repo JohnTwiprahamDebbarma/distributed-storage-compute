@@ -10,7 +10,7 @@ The consensus engine (raft_node.RaftNode) and the inter-node Raft gRPC plumbing
 build (raft_server.py); only the state machine (kv_state_machine.KVStateMachine)
 and the client-facing API differ. This is the whole point of separating Raft
 from its state machine: the same consensus core replicates a file system or a
-key-value store depending only on what you plug into apply_fn.
+key-value store depending only on what is plugged into apply_fn.
 
 Usage:
     python raft_kv_server.py --node_id 0 --config nodes_config.json
@@ -48,9 +48,9 @@ class RaftKVServicer(kv_pb2_grpc.KVServiceServicer):
     def __init__(self, raft: RaftNode, sm: KVStateMachine):
         self.raft = raft
         self.sm = sm
-        # Committed entries flow into the state machine. De-duplication of
-        # retried writes lives there too (a replicated session table), so unlike
-        # a per-node cache it survives leader failover.
+        # Committed entries flow into the state machine. I moved the
+        # de-duplication of retried writes there too (a replicated session
+        # table), because unlike a per-node cache it survives leader failover.
         self.raft.apply_fn = self.sm.apply
 
     # Helpers
@@ -117,7 +117,7 @@ class RaftKVServicer(kv_pb2_grpc.KVServiceServicer):
     # Reads -> leader
     def Get(self, request, context):
         abort_if_isolated(self.raft, context)
-        # Reads are served by the leader. With linearizable=True we first commit a
+        # Reads are served by the leader. With linearizable=True I first commit a
         # no-op read barrier: it cannot commit without a current majority, which
         # proves this node is still leader and its applied state reflects every
         # acknowledged write (a simple ReadIndex). Without it a partitioned
@@ -171,14 +171,14 @@ def serve(node_id: int, node_configs: list):
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:
-        logger.info(f"[node {node_id}] Shutting down…")
+        logger.info(f"[node {node_id}] Shutting down...")
         server.stop(grace=3)
 
 
 def main():
     parser = argparse.ArgumentParser(description="Raft KV store (mini-etcd)")
     parser.add_argument("--node_id", type=int, required=True,
-                        help="Unique ID for this node (0, 1, 2, …)")
+                        help="Unique ID for this node (0, 1, 2, ...)")
     parser.add_argument("--config", type=str, default="nodes_config.json",
                         help="Path to cluster config JSON")
     args = parser.parse_args()

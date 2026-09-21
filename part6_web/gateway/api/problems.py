@@ -1,6 +1,7 @@
 """
-Error responses. Every error the API returns - ours, FastAPI's validation
-errors, unknown routes - uses one JSON shape, RFC 9457 "problem details":
+Error responses. I give every error the API returns - the gateway's own,
+FastAPI's validation errors, unknown routes - one JSON shape, RFC 9457
+"problem details":
 
     {"type": "about:blank", "title": "Precondition Failed", "status": 412,
      "detail": "key 'city' is at version 4, not 3", "current_version": 4}
@@ -27,9 +28,9 @@ _STATUS = {
     WriteOutcomeUnknown: 504,
 }
 
-_RETRY_HINT = ("The write may or may not have been applied. Retry it with the same "
-               "Idempotency-Key: if the first attempt was applied you get its result, "
-               "otherwise it is applied now.")
+_RETRY_HINT = ("The write may or may not have been applied. Retrying it with the same "
+               "Idempotency-Key is safe: that returns the first attempt's result if it "
+               "was applied, and applies the write otherwise.")
 
 
 def problem(status: int, detail: str | None = None, headers: dict | None = None,
@@ -54,7 +55,7 @@ def _domain_handler(status: int):
     async def handle(request, exc):
         headers, extra = {}, {}
         if isinstance(exc, PreconditionFailed) and exc.current_version:
-            # Tell the client where the key is now, so it can re-read and retry.
+            # Sending the current version lets the client re-read and retry.
             headers["ETag"] = f'"{exc.current_version}"'
             extra["current_version"] = exc.current_version
         elif isinstance(exc, ClusterUnavailable):

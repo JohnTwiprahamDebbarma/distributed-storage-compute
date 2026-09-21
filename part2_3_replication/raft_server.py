@@ -321,9 +321,9 @@ class RaftGRPCServicer(raft_pb2_grpc.RaftServiceServicer):
         return raft_pb2.GetLeaderReply(
             leader_id=lid, leader_address=addr or "", has_leader=True)
 
-    # Admin RPCs - deliberately NOT blocked while isolated: they model an
-    # out-of-band management channel, so a dashboard can still watch (and heal)
-    # a node that the rest of the cluster cannot reach.
+    # Admin RPCs. I deliberately don't block these while the node is isolated:
+    # they model an out-of-band management channel, so a dashboard can still
+    # watch (and heal) a node that the rest of the cluster can't reach.
     def GetStatus(self, request, context):
         s = self.raft.status()
         return raft_pb2.GetStatusReply(
@@ -393,14 +393,14 @@ def serve(node_id: int, node_configs: list):
     try:
         server.wait_for_termination()
     except KeyboardInterrupt:
-        logger.info(f"[node {node_id}] Shutting down…")
+        logger.info(f"[node {node_id}] Shutting down...")
         server.stop(grace=3)
 
 # Entry point
 def main():
     parser = argparse.ArgumentParser(description="Raft DSFS File Server")
     parser.add_argument("--node_id", type=int, required=True,
-                        help="Unique ID for this node (0, 1, 2, …)")
+                        help="Unique ID for this node (0, 1, 2, ...)")
     parser.add_argument("--config", type=str, default="nodes_config.json",help="Path to cluster config JSON (default: nodes_config.json)")
     args = parser.parse_args()
 

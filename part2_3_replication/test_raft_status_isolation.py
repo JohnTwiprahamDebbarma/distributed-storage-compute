@@ -27,7 +27,7 @@ logging.disable(logging.CRITICAL)
 
 
 class _Message:
-    """Stand-in for a generated protobuf message: it just keeps its fields."""
+    """Stand-in for a generated protobuf message: it only keeps its fields."""
     def __init__(self, **fields):
         self.__dict__.update(fields)
 

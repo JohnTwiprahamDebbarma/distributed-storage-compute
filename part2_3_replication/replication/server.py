@@ -25,9 +25,9 @@ class ReplicatedDSFSServer(
 
     def __init__(self, my_addr: str, peer_addrs: list, data_dir: str):
         """
-        my_addr    – "host:port" this server listens on
-        peer_addrs – list of "host:port" for the OTHER replicas
-        data_dir   – directory where files are persisted
+        my_addr    - "host:port" this server listens on
+        peer_addrs - list of "host:port" for the OTHER replicas
+        data_dir   - directory where files are persisted
         """
         self.my_addr    = my_addr
         self.peer_addrs = peer_addrs
@@ -43,7 +43,7 @@ class ReplicatedDSFSServer(
         self.next_handle:   int  = 1
         self.dedup_cache:   dict = {}   # client_id -> (seq_num, response)
 
-        # Replication state – role is determined by _determine_startup_role()
+        # Replication state - role is determined by _determine_startup_role()
         self.primary_addr = self.all_addrs[0]  # tentative; updated below
         self.role         = "unknown"
         self.ready        = False
@@ -58,7 +58,7 @@ class ReplicatedDSFSServer(
         self._connect_peers()
 
         # Determine initial role by querying peers first.
-        # This handles the recovery case where a server restarts after a failover: the restarting server must NOT assume it is primary just because it has the lowest address — another server may have been elected during its absence.
+        # This handles the recovery case where a server restarts after a failover: the restarting server must NOT assume it is primary just because it has the lowest address: another server may have been elected during its absence.
         self._determine_startup_role()
 
         # Background threads (start after sync so election doesn't fire early)
@@ -102,32 +102,32 @@ class ReplicatedDSFSServer(
         Decide whether to start as primary or backup by first consulting peers.
 
         This avoids the split-brain that occurs when a recovering server
-        blindly assumes it is primary because it has the lowest address —
+        blindly assumes it is primary because it has the lowest address, when
         another server may have been elected during its absence.
 
         Logic:
         1. Query all peers for their current cluster info.
         2. If any peer names an existing primary:
-           a. If that primary is THIS server -> we were already elected;
+           a. If that primary is THIS server -> it was already elected;
               load local files and become primary.
            b. Otherwise -> sync from that primary and become a backup.
         3. If no peer responds (fresh cluster or all peers down):
-           a. If we have the lowest address -> become primary.
+           a. If this server has the lowest address -> become primary.
            b. Otherwise -> wait for the preferred primary and sync.
         """
         claimed = self._query_peers_for_primary()
 
         if claimed:
             if claimed == self.my_addr:
-                # Peers already know us as primary (e.g. cluster restart
-                # where we were primary last time too).
+                # Peers already know this server as primary (e.g. a cluster
+                # restart where it was primary last time too).
                 self.role = "primary"
                 self.primary_addr = self.my_addr
                 self._load_existing_files()
                 self.ready = True
-                print(f"[{self.my_addr}] Peers confirm us as PRIMARY", flush=True)
+                print(f"[{self.my_addr}] Peers confirm this node as PRIMARY", flush=True)
             else:
-                # Another server is currently primary – become a backup.
+                # Another server is currently primary - become a backup.
                 self.role = "backup"
                 self.primary_addr = claimed
                 if claimed not in self.peer_stubs:
@@ -136,7 +136,7 @@ class ReplicatedDSFSServer(
                       f"Starting as BACKUP.", flush=True)
                 self._sync_or_elect(claimed)
         else:
-            # No peers responded – either fresh startup or all peers are down.
+            # No peers responded - either fresh startup or all peers are down.
             preferred = self.all_addrs[0]   # lowest address preferred
             if self.my_addr == preferred:
                 self.role = "primary"
@@ -191,7 +191,7 @@ class ReplicatedDSFSServer(
                     return True
             except grpc.RpcError as e:
                 print(f"[{self.my_addr}] Sync attempt from {source_addr} failed "
-                      f"({e.code()}), retrying …", flush=True)
+                      f"({e.code()}), retrying ...", flush=True)
             time.sleep(2)
         return False
 
@@ -430,7 +430,7 @@ class ReplicatedDSFSServer(
     def _full_path(self, filename: str) -> str:
         return os.path.join(self.data_dir, filename)
 
-    # ---- TestVersionNumber – any replica can answer ----
+    # ---- TestVersionNumber - any replica can answer ----
 
     def TestVersionNumber(self, request, context):
         if self._not_ready(context):
@@ -440,7 +440,7 @@ class ReplicatedDSFSServer(
             version = self.file_versions.get(request.filename, 1)
         return fs_pb2.TestVersionResponse(version=version, success=True, error_message="")
 
-    # ---- Create – primary only ----
+    # ---- Create - primary only ----
 
     def Create(self, request, context):
         if self._not_ready(context):
@@ -471,7 +471,7 @@ class ReplicatedDSFSServer(
         except Exception as e:
             return fs_pb2.CreateResponse(file_handle=-1, success=False, error_message=str(e))
 
-    # ---- Open – any replica for reads; primary only for writes ----
+    # ---- Open - any replica for reads; primary only for writes ----
 
     def Open(self, request, context):
         if self._not_ready(context):
@@ -512,7 +512,7 @@ class ReplicatedDSFSServer(
         except Exception as e:
             return fs_pb2.OpenResponse(file_handle=-1, success=False, error_message=str(e))
 
-    # ---- Close – primary only for write-mode ----
+    # ---- Close - primary only for write-mode ----
 
     def Close(self, request, context):
         if self._not_ready(context):

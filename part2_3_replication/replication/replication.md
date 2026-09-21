@@ -46,7 +46,7 @@ Primary-backup has known failure modes that the implementation must address:
 ```mermaid
 graph TB
     subgraph Clients
-        C["ReplicatedDSFSClientStub<br/>• Discovers primary via GetClusterInfo<br/>• Routes all writes to primary<br/>• On FAILED_PRECONDITION -> redirects<br/>• On UNAVAILABLE -> rediscovers primary, retries with backoff"]
+        C["ReplicatedDSFSClientStub<br/>- Discovers primary via GetClusterInfo<br/>- Routes all writes to primary<br/>- On FAILED_PRECONDITION -> redirects<br/>- On UNAVAILABLE -> rediscovers primary, retries with backoff"]
     end
 
     subgraph Cluster
@@ -74,25 +74,25 @@ graph TB
 
 ```
 fs/replication/
-├── replication.proto          # Peer-to-peer RPC definitions
-├── replication_pb2.py         # Generated protobuf classes (auto-generated)
-├── replication_pb2_grpc.py    # Generated gRPC stubs  (auto-generated)
-├── server.py                  # Unified primary/backup replica server
-├── client_stub.py             # Client stub with replica awareness
-├── client.py                  # Legacy interactive test client
-├── generate_proto.sh          # Regenerates pb2 files from replication.proto
-├── start_cluster.sh           # Convenience script to start 3 servers
-├── venv/                      # Python virtual environment
-└── tests/
-    ├── __init__.py
-    ├── test_suite.py          # 32 test cases, cluster-agnostic
-    ├── run_local.py           # Automated runner: starts cluster, tests, teardown
-    └── run_distributed.py     # Runner for multi-machine clusters
+|-- replication.proto          # Peer-to-peer RPC definitions
+|-- replication_pb2.py         # Generated protobuf classes (auto-generated)
+|-- replication_pb2_grpc.py    # Generated gRPC stubs  (auto-generated)
+|-- server.py                  # Unified primary/backup replica server
+|-- client_stub.py             # Client stub with replica awareness
+|-- client.py                  # Legacy interactive test client
+|-- generate_proto.sh          # Regenerates pb2 files from replication.proto
+|-- start_cluster.sh           # Convenience script to start 3 servers
+|-- venv/                      # Python virtual environment
+`-- tests/
+    |-- __init__.py
+    |-- test_suite.py          # 32 test cases, cluster-agnostic
+    |-- run_local.py           # Automated runner: starts cluster, tests, teardown
+    `-- run_distributed.py     # Runner for multi-machine clusters
 ```
 
 - `server.py` imports `fs_pb2` / `fs_pb2_grpc` from `../` (the parent `fs/` directory).
 - `client_stub.py` is a drop-in replacement for `../client_stub.py`. It exposes the same `open / read / write / close / create / test_version_number` API.
-- Please note that here `fs` means File System (Part 1). In this repository the code for Parts 2-3 lives in the `part2_3_replication/` directory.
+- Here `fs` means File System (Part 1). In this repository the code for Parts 2-3 lives in the `part2_3_replication/` directory.
 
 ---
 
@@ -160,7 +160,7 @@ The server is a single class `ReplicatedDSFSServer` that implements **both** gRP
 
 ```python
 class ReplicatedDSFSServer(
-    fs_pb2_grpc.FileSystemServicer,       # client-facing (Tasks 1–2)
+    fs_pb2_grpc.FileSystemServicer,       # client-facing (Tasks 1-2)
     replication_pb2_grpc.ReplicationServiceServicer,  # peer-to-peer (Task 3)
 ):
 ```
@@ -218,7 +218,7 @@ Two daemon threads run for the lifetime of the server:
 - Condition: `last_heartbeat[primary] > 0` **AND** `now - last_heartbeat[primary] > HEARTBEAT_TIMEOUT`.
   - The `> 0` guard is critical: it prevents a newly-started server from declaring an election before it has ever received a heartbeat from the primary.
 
-Timeline example – primary fails at t=10:
+Timeline example - primary fails at t=10:
 
 ```mermaid
 sequenceDiagram
@@ -238,7 +238,7 @@ sequenceDiagram
     S0--xS1: t=12: No heartbeat
     Note over S1: now - last = 4s < 6s -> no action
     S0--xS1: t=14: No heartbeat
-    Note over S1: now - last = 6s ≥ threshold -> _elect_new_primary()
+    Note over S1: now - last = 6s >= threshold -> _elect_new_primary()
 ```
 
 ---
@@ -423,19 +423,19 @@ bash generate_proto.sh   # generates replication_pb2.py and replication_pb2_grpc
 ### Local (single machine, 3 terminals)
 
 ```bash
-# Terminal 1 – primary
+# Terminal 1 - primary
 ./venv/bin/python server.py \
     --addr  localhost:50050 \
     --peers localhost:50051,localhost:50052 \
     --data-dir ./data_50050
 
-# Terminal 2 – backup 1 (start after primary is listening)
+# Terminal 2 - backup 1 (start after primary is listening)
 ./venv/bin/python server.py \
     --addr  localhost:50051 \
     --peers localhost:50050,localhost:50052 \
     --data-dir ./data_50051
 
-# Terminal 3 – backup 2
+# Terminal 3 - backup 2
 ./venv/bin/python server.py \
     --addr  localhost:50052 \
     --peers localhost:50050,localhost:50051 \
@@ -453,7 +453,7 @@ bash start_cluster.sh
 Assign one port (e.g. 50050) on each machine. Replace `localhost` with the actual hostname or IP.
 
 ```bash
-# Machine A (initial primary – must have lowest address)
+# Machine A (initial primary - must have lowest address)
 ./venv/bin/python server.py \
     --addr  machineA:50050 \
     --peers machineB:50050,machineC:50050 \
@@ -494,7 +494,7 @@ data = client.read(fh, 0, 1024)
 client.close(fh)
 ```
 
-Or: Just to test, run the client.py using
+Or, for a quick test, run client.py using
 ```bash
 source venv/bin/activate && python3 client.py
 ```
@@ -507,7 +507,7 @@ source venv/bin/activate && python3 client.py
 
 The test suite in `tests/test_suite.py` contains **32 automated test cases** across 9 groups.
 
-#### Group A – Basic DSFS Functionality (T01–T08)
+#### Group A - Basic DSFS Functionality (T01-T08)
 
 | Test | What it verifies |
 |---|---|
@@ -520,7 +520,7 @@ The test suite in `tests/test_suite.py` contains **32 automated test cases** acr
 | T07 | Large file (1 MB) round-trip over the network |
 | T08 | Writing empty content (`b""`) is handled correctly |
 
-#### Group B – Client-Side Caching (T09–T11)
+#### Group B - Client-Side Caching (T09-T11)
 
 | Test | What it verifies |
 |---|---|
@@ -528,7 +528,7 @@ The test suite in `tests/test_suite.py` contains **32 automated test cases** acr
 | T10 | `open()` after a remote write detects version mismatch and re-fetches |
 | T11 | Repeated opens with no intervening write always hit cache |
 
-#### Group C – Replication Correctness (T12–T14)
+#### Group C - Replication Correctness (T12-T14)
 
 | Test | What it verifies |
 |---|---|
@@ -536,7 +536,7 @@ The test suite in `tests/test_suite.py` contains **32 automated test cases** acr
 | T13 | All replicas report the same version number after a write |
 | T14 | A direct gRPC read from a backup returns the same data as the primary |
 
-#### Group D – Primary Failure / Failover (T15–T19)
+#### Group D - Primary Failure / Failover (T15-T19)
 
 | Test | What it verifies |
 |---|---|
@@ -546,14 +546,14 @@ The test suite in `tests/test_suite.py` contains **32 automated test cases** acr
 | T18 | The new primary is the lowest-address surviving server |
 | T19 | Three sequential writes to the new primary all succeed |
 
-#### Group E – Backup Failure (T20–T21)
+#### Group E - Backup Failure (T20-T21)
 
 | Test | What it verifies |
 |---|---|
 | T20 | Primary still accepts writes when one backup is down |
 | T21 | Reads still succeed when one backup is down |
 
-#### Group F – Server Recovery / Re-sync (T22–T24)
+#### Group F - Server Recovery / Re-sync (T22-T24)
 
 | Test | What it verifies |
 |---|---|
@@ -561,21 +561,21 @@ The test suite in `tests/test_suite.py` contains **32 automated test cases** acr
 | T23 | The recovered old primary also receives post-failover writes |
 | T24 | The recovered old primary rejoins as backup (not primary) |
 
-#### Group G – Idempotency / Duplicate Request Handling (T25–T26)
+#### Group G - Idempotency / Duplicate Request Handling (T25-T26)
 
 | Test | What it verifies |
 |---|---|
 | T25 | A duplicate `Create` RPC (same `seq_num`) returns the cached response, not an error |
 | T26 | A duplicate `Close` RPC with different data (same `seq_num`) does not double-write |
 
-#### Group H – Concurrent Clients (T27–T28)
+#### Group H - Concurrent Clients (T27-T28)
 
 | Test | What it verifies |
 |---|---|
 | T27 | Two clients writing to different files simultaneously do not interfere |
 | T28 | Four concurrent readers all get consistent data |
 
-#### Group I – Edge Cases (T29–T32)
+#### Group I - Edge Cases (T29-T32)
 
 | Test | What it verifies |
 |---|---|
@@ -602,7 +602,7 @@ cd fs/replication
 # Full suite (all 32 tests, including fault injection):
 ./venv/bin/python tests/run_local.py
 
-# Smoke test (22 tests, no fault injection – faster):
+# Smoke test (22 tests, no fault injection - faster):
 ./venv/bin/python tests/run_local.py --no-fault
 
 # Custom ports (if 50050-50052 are in use):
@@ -626,7 +626,7 @@ Expected output (all pass):
 
 Start the cluster on the three machines as described in §9. Then run `tests/run_distributed.py` from any machine (or a separate client machine).
 
-#### Option A – SSH fault injection (fully automated)
+#### Option A - SSH fault injection (fully automated)
 
 The test runner kills and restarts servers via SSH. No manual intervention required.
 
@@ -641,7 +641,7 @@ The test runner kills and restarts servers via SSH. No manual intervention requi
 
 The runner uses `pkill -f 'server.py.*<port>'` to kill and `nohup python server.py ... &` to restart.
 
-#### Option B – Manual fault injection
+#### Option B - Manual fault injection
 
 The runner pauses and prints instructions for the operator to kill/restart servers.
 
@@ -650,18 +650,18 @@ The runner pauses and prints instructions for the operator to kill/restart serve
     --servers machineA:50050,machineB:50050,machineC:50050
 ```
 
-When fault-injection tests are reached, you will see prompts like:
+When the fault-injection tests are reached, they print prompts like:
 
 ```
     ACTION REQUIRED:
      On machine 'machineA', kill the server on port 50050:
        pkill -f 'server.py.*50050'
-     Press Enter once the server is stopped …
+     Press Enter once the server is stopped ...
 ```
 
-#### Option C – Skip fault injection (read-only)
+#### Option C - Skip fault injection (read-only)
 
-Run Groups A–C, G–I only (22 tests, no servers are killed).
+Run Groups A-C, G-I only (22 tests, no servers are killed).
 
 ```bash
 ./venv/bin/python tests/run_distributed.py \
@@ -674,7 +674,7 @@ Run Groups A–C, G–I only (22 tests, no servers are killed).
 `run_distributed.py` always runs a connectivity check before starting tests:
 
 ```
-[PRE-FLIGHT] Checking connectivity …
+[PRE-FLIGHT] Checking connectivity ...
   YES  machineA:50050  role=primary  primary=machineA:50050
   YES  machineB:50050  role=backup   primary=machineA:50050
   YES  machineC:50050  role=backup   primary=machineA:50050

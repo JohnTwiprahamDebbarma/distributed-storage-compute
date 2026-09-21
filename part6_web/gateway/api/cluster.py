@@ -51,12 +51,12 @@ async def stream_status(websocket: WebSocket, cluster: Cluster):
     await websocket.accept()
     try:
         while True:
-            # node_statuses() blocks on gRPC, so run it off the event loop.
+            # node_statuses() blocks on gRPC, so I run it off the event loop.
             statuses = await run_in_threadpool(cluster.node_statuses)
             await websocket.send_json(summarize(statuses).model_dump(mode="json"))
             try:
-                # The client never sends anything; waiting for a message is how
-                # we notice promptly when it goes away.
+                # The client never sends anything. I wait for a message anyway
+                # because that is how a disconnect shows up promptly.
                 await asyncio.wait_for(websocket.receive_text(), timeout=interval)
             except asyncio.TimeoutError:
                 pass

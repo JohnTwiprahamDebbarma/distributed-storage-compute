@@ -41,7 +41,7 @@ class LocalClusterController(ClusterController):
         return True
 
     def _kill_stale_on_ports(self):
-        """Kill any processes already listening on our ports (stale from prior runs)."""
+        """Kill any processes already listening on the cluster's ports (stale from prior runs)."""
         for port in self.ports:
             try:
                 result = subprocess.run(
@@ -204,7 +204,7 @@ def main():
     parser.add_argument(
         "--no-fault",
         action="store_true",
-        help="Skip fault-injection tests (Groups D–F)",
+        help="Skip fault-injection tests (Groups D-F)",
     )
     parser.add_argument(
         "--no-cleanup",
@@ -226,12 +226,12 @@ def main():
     ctrl = LocalClusterController(ports)
 
     print("=" * 62)
-    print("  Replicated DSFS – Local Test Runner")
+    print("  Replicated DSFS - Local Test Runner")
     print(f"  Servers: {ctrl.addrs}")
     print("=" * 62)
 
     # ---- Start cluster ----
-    print("\n[SETUP] Starting 3-node cluster …")
+    print("\n[SETUP] Starting 3-node cluster ...")
     ctrl.start_all(input_dir=args.input_dir)
 
     # ---- Run tests ----
@@ -246,9 +246,9 @@ def main():
         print("\n[INTERRUPTED]")
     finally:
         if not args.no_cleanup:
-            print("\n[TEARDOWN] Stopping servers …")
+            print("\n[TEARDOWN] Stopping servers ...")
             ctrl.stop_all()
-            print("[TEARDOWN] Removing test data directories …")
+            print("[TEARDOWN] Removing test data directories ...")
             ctrl.cleanup_data()
         else:
             print("\n[INFO] --no-cleanup set; servers left running.")

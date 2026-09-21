@@ -2,8 +2,8 @@
 HTTP routes for keys (the "controller" layer). They translate HTTP - paths,
 headers, status codes, ETags - to and from calls on KVService, and nothing more.
 
-A key's version is its ETag, so the store's compare-and-swap becomes standard
-HTTP optimistic concurrency:
+I use a key's version as its ETag, so the store's compare-and-swap becomes
+standard HTTP optimistic concurrency:
     GET  /v1/kv/city                          -> 200, ETag: "3"
     PUT  /v1/kv/city   If-Match: "3"          -> 200 if still at version 3, else 412
     PUT  /v1/kv/city   If-None-Match: *       -> 201 only if the key doesn't exist yet
@@ -46,7 +46,8 @@ def read_key(key: Key, response: Response, service: Service,
     so the value reflects every write acknowledged before the read started.
     """
     entry = service.get(key, linearizable=(consistency == "linearizable"))
-    # no-cache = "you may cache this, but revalidate first", which If-None-Match makes cheap
+    # I send no-cache, meaning "cache this but revalidate first"; If-None-Match
+    # makes revalidating cheap.
     headers = {"ETag": _etag(entry.version), "Cache-Control": "no-cache"}
     if if_none_match is not None and _matches(if_none_match, entry.version):
         return Response(status_code=304, headers=headers)
@@ -86,7 +87,8 @@ def delete_key(key: Key, service: Service,
                if_match: Annotated[str | None, Header()] = None,
                idempotency_key: IdempotencyKey = None):
     """Delete a key (404 if it doesn't exist)."""
-    # Ignoring a precondition would delete something the client meant to protect.
+    # I reject If-Match here rather than ignore it: ignoring a precondition could
+    # delete something the client meant to protect.
     if if_match is not None:
         raise InvalidRequest("If-Match is not supported on DELETE yet")
     service.delete(key, idempotency_key=idempotency_key)
@@ -107,7 +109,7 @@ def _parse_if_match(header: str | None) -> int | None:
         return None
     tag = header.strip()
     if tag == "*":
-        raise InvalidRequest('If-Match: * is not supported; send the ETag you read, e.g. "3"')
+        raise InvalidRequest('If-Match: * is not supported; send the ETag from a read, e.g. "3"')
     if tag.startswith("W/"):
         raise InvalidRequest("If-Match needs a strong ETag; a weak one (W/...) never matches")
     match = _STRONG_ETAG.fullmatch(tag)

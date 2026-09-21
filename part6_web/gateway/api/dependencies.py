@@ -1,5 +1,5 @@
 """
-How routes get their collaborators (FastAPI dependency injection). Both come
+How routes get their collaborators (FastAPI dependency injection). I take both
 from app.state, set up in main.py, so tests can hand the app a fake cluster.
 HTTPConnection covers plain requests and WebSockets alike.
 """

@@ -57,7 +57,7 @@ class TestResult:
         if self.failures:
             print("  Failed tests:")
             for name, detail in self.failures:
-                print(f"    • {name}: {detail}")
+                print(f"    - {name}: {detail}")
         print(bar)
         return self.failed == 0
 
@@ -94,9 +94,9 @@ def open_read_direct(addr: str, filename: str) -> bytes | None:
 
 
 def section(title: str):
-    print(f"\n{'─' * 62}")
+    print(f"\n{'-' * 62}")
     print(f"  {title}")
-    print(f"{'─' * 62}")
+    print(f"{'-' * 62}")
 
 
 
@@ -134,11 +134,11 @@ class ClusterController:
 
 
 
-# Group A – Basic DSFS functionality
+# Group A - Basic DSFS functionality
 def run_group_a(servers, r: TestResult):
-    section("Group A – Basic DSFS functionality")
+    section("Group A - Basic DSFS functionality")
 
-    # T01 – Create a new file
+    # T01 - Create a new file
     c = fresh_client(servers, "a_t01")
     try:
         fh = c.create("a_file.txt")
@@ -151,7 +151,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T02 – Duplicate create must fail
+    # T02 - Duplicate create must fail
     c = fresh_client(servers, "a_t02")
     try:
         c.create("a_dup.txt")
@@ -165,7 +165,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T03 – Open non-existent file in read mode must fail
+    # T03 - Open non-existent file in read mode must fail
     c = fresh_client(servers, "a_t03")
     try:
         c.open("no_such_file_xyz.txt", mode="r")
@@ -175,7 +175,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T04 – Write then read back exact bytes
+    # T04 - Write then read back exact bytes
     c = fresh_client(servers, "a_t04")
     CONTENT = b"Hello, DSFS replication!\n"
     try:
@@ -196,7 +196,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T05 – Version increments on every write
+    # T05 - Version increments on every write
     c = fresh_client(servers, "a_t05")
     try:
         c.create("a_ver.txt")
@@ -221,7 +221,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T06 – Multiple independent files
+    # T06 - Multiple independent files
     c = fresh_client(servers, "a_t06")
     try:
         for i in range(5):
@@ -246,7 +246,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T07 – Large file (1 MB)
+    # T07 - Large file (1 MB)
     c = fresh_client(servers, "a_t07")
     LARGE = b"X" * (1024 * 1024)
     try:
@@ -267,7 +267,7 @@ def run_group_a(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T08 – Write empty content
+    # T08 - Write empty content
     c = fresh_client(servers, "a_t08")
     try:
         c.create("a_empty.txt")
@@ -288,12 +288,12 @@ def run_group_a(servers, r: TestResult):
 
 
 
-# Group B – Client-side caching
+# Group B - Client-side caching
 def run_group_b(servers, r: TestResult):
-    section("Group B – Client-side caching")
+    section("Group B - Client-side caching")
 
-    # T09 – Cache hit: second open must not send a new Open+data RPC
-    # We verify by checking that fetch_data was False (print output contains CACHE HIT)
+    # T09 - Cache hit: second open must not send a new Open+data RPC
+    # Verified by checking that fetch_data was False (the printed output contains CACHE HIT)
     c = fresh_client(servers, "b_t09")
     try:
         c.create("b_cache.txt")
@@ -318,7 +318,7 @@ def run_group_b(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T10 – Cache miss when server version advances (another client wrote)
+    # T10 - Cache miss when server version advances (another client wrote)
     c1 = fresh_client(servers, "b_t10_c1")
     c2 = fresh_client(servers, "b_t10_c2")
     try:
@@ -356,7 +356,7 @@ def run_group_b(servers, r: TestResult):
         c1.disconnect()
         c2.disconnect()
 
-    # T11 – Cached file used across open calls when version unchanged
+    # T11 - Cached file used across open calls when version unchanged
     c = fresh_client(servers, "b_t11")
     try:
         c.create("b_stable.txt")
@@ -386,13 +386,13 @@ def run_group_b(servers, r: TestResult):
 
 
 
-# Group C – Replication correctness
+# Group C - Replication correctness
 def run_group_c(servers, r: TestResult, ctrl: ClusterController):
-    section("Group C – Replication correctness")
+    section("Group C - Replication correctness")
 
     CONTENT = b"Replicated data payload\n"
 
-    # T12 – Data replicated to ALL backups right after write
+    # T12 - Data replicated to ALL backups right after write
     c = fresh_client(servers, "c_t12")
     try:
         c.create("c_repl.txt")
@@ -431,7 +431,7 @@ def run_group_c(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T13 – Version consistent across all replicas after write
+    # T13 - Version consistent across all replicas after write
     c = fresh_client(servers, "c_t13")
     try:
         c.create("c_ver.txt")
@@ -465,7 +465,7 @@ def run_group_c(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T14 – Read from backup returns same data as primary
+    # T14 - Read from backup returns same data as primary
     c = fresh_client(servers, "c_t14")
     try:
         c.create("c_read_backup.txt")
@@ -498,9 +498,9 @@ def run_group_c(servers, r: TestResult, ctrl: ClusterController):
 
 
 
-# Group D – Primary failure / failover
+# Group D - Primary failure / failover
 def run_group_d(servers, r: TestResult, ctrl: ClusterController):
-    section("Group D – Primary failure / failover")
+    section("Group D - Primary failure / failover")
 
     c = fresh_client(servers, "d_setup")
     try:
@@ -517,11 +517,11 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    print(f"\n  {INFO_LABEL} Killing primary ({old_primary}) …")
+    print(f"\n  {INFO_LABEL} Killing primary ({old_primary}) ...")
     ctrl.kill(old_primary)
     ctrl.wait_election()
 
-    # T15 – New primary elected after failure
+    # T15 - New primary elected after failure
     c = fresh_client(servers, "d_t15")
     try:
         new_primary = c._primary_addr
@@ -542,7 +542,7 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T16 – Read succeeds after primary failure
+    # T16 - Read succeeds after primary failure
     c = fresh_client(servers, "d_t16")
     try:
         fh   = c.open("d_failover.txt", mode="r")
@@ -558,7 +558,7 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T17 – Write succeeds after primary failure
+    # T17 - Write succeeds after primary failure
     c = fresh_client(servers, "d_t17")
     try:
         fh = c.open("d_failover.txt", mode="w")
@@ -577,7 +577,7 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T18 – New primary chosen is lowest-address surviving server
+    # T18 - New primary chosen is lowest-address surviving server
     surviving = sorted(s for s in servers if s != old_primary)
     c = fresh_client(servers, "d_t18")
     try:
@@ -593,7 +593,7 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
     finally:
         c.disconnect()
 
-    # T19 – Multiple sequential writes to new primary
+    # T19 - Multiple sequential writes to new primary
     c = fresh_client(servers, "d_t19")
     try:
         ok = True
@@ -620,22 +620,22 @@ def run_group_d(servers, r: TestResult, ctrl: ClusterController):
 
 
 
-# Group E – Backup failure
+# Group E - Backup failure
 def run_group_e(servers, r: TestResult, ctrl: ClusterController, alive_primary: str):
-    section("Group E – Backup failure")
+    section("Group E - Backup failure")
 
     backups = [s for s in servers if s != alive_primary]
     if not backups:
-        r.record_skip("T20 Write with one backup down", "need ≥2 servers")
-        r.record_skip("T21 Read with one backup down",  "need ≥2 servers")
+        r.record_skip("T20 Write with one backup down", "need >=2 servers")
+        r.record_skip("T21 Read with one backup down",  "need >=2 servers")
         return
 
     victim_backup = backups[0]
-    print(f"\n  {INFO_LABEL} Killing backup ({victim_backup}) …")
+    print(f"\n  {INFO_LABEL} Killing backup ({victim_backup}) ...")
     ctrl.kill(victim_backup)
     time.sleep(2)
 
-    # T20 – Primary still accepts writes when one backup is down
+    # T20 - Primary still accepts writes when one backup is down
     c = fresh_client(servers, "e_t20")
     try:
         c.create("e_backup_down.txt")
@@ -655,7 +655,7 @@ def run_group_e(servers, r: TestResult, ctrl: ClusterController, alive_primary: 
     finally:
         c.disconnect()
 
-    # T21 – Reads still served when one backup is down
+    # T21 - Reads still served when one backup is down
     c = fresh_client(servers, "e_t21")
     try:
         fh   = c.open("e_backup_down.txt", mode="r")
@@ -671,7 +671,7 @@ def run_group_e(servers, r: TestResult, ctrl: ClusterController, alive_primary: 
     finally:
         c.disconnect()
 
-    print(f"\n  {INFO_LABEL} Restarting backup ({victim_backup}) …")
+    print(f"\n  {INFO_LABEL} Restarting backup ({victim_backup}) ...")
     ctrl.restart(victim_backup)
     ctrl.wait_sync()
 
@@ -679,12 +679,12 @@ def run_group_e(servers, r: TestResult, ctrl: ClusterController, alive_primary: 
 
 
 
-# Group F – Server recovery / re-sync
+# Group F - Server recovery / re-sync
 def run_group_f(servers, r: TestResult, ctrl: ClusterController,
                 killed_primary: str | None, restarted_backup: str | None):
-    section("Group F – Server recovery / re-sync")
+    section("Group F - Server recovery / re-sync")
 
-    # T22 – Restarted backup has the data written while it was down
+    # T22 - Restarted backup has the data written while it was down
     if restarted_backup:
         data = open_read_direct(restarted_backup, "e_backup_down.txt")
         if data is not None and b"written with backup down" in data:
@@ -695,9 +695,9 @@ def run_group_f(servers, r: TestResult, ctrl: ClusterController,
     else:
         r.record_skip("T22 Restarted backup synced data", "backup was not restarted")
 
-    # T23 – Restart the killed primary; it rejoins as backup and syncs
+    # T23 - Restart the killed primary; it rejoins as backup and syncs
     if killed_primary:
-        print(f"\n  {INFO_LABEL} Restarting old primary ({killed_primary}) …")
+        print(f"\n  {INFO_LABEL} Restarting old primary ({killed_primary}) ...")
         ctrl.restart(killed_primary)
         ctrl.wait_sync()
 
@@ -709,7 +709,7 @@ def run_group_f(servers, r: TestResult, ctrl: ClusterController,
             r.record_fail("T23 Recovered old primary synced post-failover writes",
                           f"got {data!r}")
 
-        # T24 – Recovered server reports correct role (backup, not primary)
+        # T24 - Recovered server reports correct role (backup, not primary)
         try:
             import replication_pb2, replication_pb2_grpc
             ch   = grpc.insecure_channel(killed_primary)
@@ -731,11 +731,11 @@ def run_group_f(servers, r: TestResult, ctrl: ClusterController,
 
 
 
-# Group G – Idempotency / duplicate request handling
+# Group G - Idempotency / duplicate request handling
 def run_group_g(servers, r: TestResult):
-    section("Group G – Idempotency / duplicate request handling")
+    section("Group G - Idempotency / duplicate request handling")
 
-    # T25 – Duplicate Create (same seq_num) returns same response, no double-create
+    # T25 - Duplicate Create (same seq_num) returns same response, no double-create
     c = fresh_client(servers, "g_t25")
     try:
         import fs_pb2, fs_pb2_grpc
@@ -761,7 +761,7 @@ def run_group_g(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T26 – Duplicate Close (same seq_num) returns cached response, no double-write
+    # T26 - Duplicate Close (same seq_num) returns cached response, no double-write
     c = fresh_client(servers, "g_t26")
     try:
         c.create("g_close_idem.txt")
@@ -808,11 +808,11 @@ def run_group_g(servers, r: TestResult):
 
 
 
-# Group H – Concurrent clients
+# Group H - Concurrent clients
 def run_group_h(servers, r: TestResult):
-    section("Group H – Concurrent clients")
+    section("Group H - Concurrent clients")
 
-    # T27 – Two clients write different files simultaneously; no interference
+    # T27 - Two clients write different files simultaneously; no interference
     errors = []
 
     def client_writer(name, content, errs):
@@ -846,7 +846,7 @@ def run_group_h(servers, r: TestResult):
         r.record_fail("T27 Two concurrent writers to different files",
                       "; ".join(errors))
 
-    # T28 – Two clients read the same file simultaneously
+    # T28 - Two clients read the same file simultaneously
     c_setup = fresh_client(servers, "h_t28_setup")
     try:
         c_setup.create("h_shared_read.txt")
@@ -888,11 +888,11 @@ def run_group_h(servers, r: TestResult):
 
 
 
-# Group I – Edge cases
+# Group I - Edge cases
 def run_group_i(servers, r: TestResult):
-    section("Group I – Edge cases")
+    section("Group I - Edge cases")
 
-    # T29 – Read beyond end of file returns what is available
+    # T29 - Read beyond end of file returns what is available
     c = fresh_client(servers, "i_t29")
     try:
         c.create("i_eof.txt")
@@ -911,7 +911,7 @@ def run_group_i(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T30 – Read at non-zero offset
+    # T30 - Read at non-zero offset
     c = fresh_client(servers, "i_t30")
     try:
         c.create("i_offset.txt")
@@ -930,7 +930,7 @@ def run_group_i(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T31 – Invalid file handle raises error
+    # T31 - Invalid file handle raises error
     c = fresh_client(servers, "i_t31")
     try:
         try:
@@ -941,7 +941,7 @@ def run_group_i(servers, r: TestResult):
     finally:
         c.disconnect()
 
-    # T32 – TestVersionNumber on non-existent file returns version 1 (default)
+    # T32 - TestVersionNumber on non-existent file returns version 1 (default)
     c = fresh_client(servers, "i_t32")
     try:
         v = c.test_version_number("i_nonexistent_xyz.txt")
@@ -978,7 +978,7 @@ def run_all(servers: list, ctrl: ClusterController,
     restarted_backup  = None
 
     if skip_fault_injection:
-        section("Groups D–F – Fault injection (SKIPPED)")
+        section("Groups D-F - Fault injection (SKIPPED)")
         print(f"  {SKIP_LABEL} All fault-injection tests skipped (--no-fault flag)")
         r.skipped += 7   # approximate count
     else:

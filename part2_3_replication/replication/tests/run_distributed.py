@@ -24,11 +24,11 @@ class SSHClusterController(ClusterController):
                  server_dir: str, data_dir_pattern: str,
                  election_wait: float = 10, sync_wait: float = 9):
         """
-        addrs – list of "host:port"
-        ssh_user – SSH username
-        ssh_key – path to private key (None = default)
-        server_dir – remote directory containing server.py (same on all machines)
-        data_dir_pattern – remote data directory (same on all machines)
+        addrs - list of "host:port"
+        ssh_user - SSH username
+        ssh_key - path to private key (None = default)
+        server_dir - remote directory containing server.py (same on all machines)
+        data_dir_pattern - remote data directory (same on all machines)
         """
         self.addrs= addrs
         self.ssh_user = ssh_user
@@ -110,7 +110,7 @@ class ManualClusterController(ClusterController):
         print(f"\n ACTION REQUIRED:")
         print(f"     On machine '{host}', kill the server on port {port}:")
         print(f"       pkill -f 'server.py.*{port}'")
-        input("     Press Enter once the server is stopped … ")
+        input("     Press Enter once the server is stopped ... ")
 
     def restart(self, addr: str):
         host, port = addr.split(":")
@@ -122,14 +122,14 @@ class ManualClusterController(ClusterController):
         print(f"           --addr {addr} \\")
         print(f"           --peers {','.join(peers)} \\")
         print(f"           --data-dir ./server_data &")
-        input("     Press Enter once the server is running … ")
+        input("     Press Enter once the server is running ... ")
 
     def wait_election(self):
-        print(f"  {INFO_LABEL} Waiting {self._election_wait}s for election …")
+        print(f"  {INFO_LABEL} Waiting {self._election_wait}s for election ...")
         time.sleep(self._election_wait)
 
     def wait_sync(self):
-        print(f"  {INFO_LABEL} Waiting {self._sync_wait}s for sync …")
+        print(f"  {INFO_LABEL} Waiting {self._sync_wait}s for sync ...")
         time.sleep(self._sync_wait)
 
 
@@ -167,7 +167,7 @@ def main():
     )
     parser.add_argument(
         "--no-fault", action="store_true",
-        help="Skip fault-injection tests (Groups D–F) – safe read-only run",
+        help="Skip fault-injection tests (Groups D-F) - safe read-only run",
     )
     parser.add_argument(
         "--ssh-user", default=None,
@@ -197,12 +197,12 @@ def main():
     servers = [s.strip() for s in args.servers.split(",")]
 
     print("=" * 62)
-    print("  Replicated DSFS – Distributed Test Runner")
+    print("  Replicated DSFS - Distributed Test Runner")
     print(f"  Servers: {servers}")
     print("=" * 62)
 
     # ---- Pre-flight connectivity check ----
-    print("\n[PRE-FLIGHT] Checking connectivity …")
+    print("\n[PRE-FLIGHT] Checking connectivity ...")
     if not check_connectivity(servers):
         print("\nERROR: One or more servers unreachable. Aborting.")
         sys.exit(1)

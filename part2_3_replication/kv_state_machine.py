@@ -12,11 +12,11 @@ created it. The RaftKVServicer wires `RaftNode.apply_fn` to
 `KVStateMachine.apply`, so every replica applies the same sequence of entries and
 converges to the same store.
 
-It also owns the client session table used to de-duplicate retried writes.
-Because the table is only ever changed by apply() - i.e. by the replicated log -
-every replica holds the same table, so a write retried against a *new* leader
-after failover is recognised as a duplicate and answered from the table instead
-of being applied twice (exactly-once, as in section 6.3 of the Raft dissertation).
+I also keep the client session table for de-duplicating retried writes here.
+Only apply() - that is, the replicated log - ever changes it, so every replica
+holds the same table, and a write retried against a *new* leader after failover
+is recognised as a duplicate and answered from the table instead of being
+applied twice (exactly-once, as in section 6.3 of the Raft dissertation).
 """
 
 import base64
@@ -24,8 +24,8 @@ import json
 import threading
 from collections import OrderedDict
 
-# Upper bound on remembered client sessions. The least recently active client is
-# evicted first, in *log order*, so every replica evicts exactly the same session
+# Upper bound on remembered client sessions. I evict the least recently active
+# client first, in *log order*, so every replica evicts exactly the same session
 # at exactly the same point and the tables never diverge.
 MAX_SESSIONS = 10_000
 
@@ -45,8 +45,8 @@ class KVStateMachine:
     def __init__(self, max_sessions: int = MAX_SESSIONS):
         # key (str) -> {"value": bytes, "version": int}
         self.store = {}
-        # deleted key -> the version it had when deleted, so a re-created key
-        # continues from there and a key's versions never repeat
+        # deleted key -> its last version. I keep it so a re-created key
+        # continues from there and a key's versions never repeat.
         self.tombstones = {}
         # client_id -> {"seq": int, "result": dict}, least recently active first
         self.sessions = OrderedDict()
@@ -68,7 +68,7 @@ class KVStateMachine:
             if tracked:
                 cached = self._session_result(client_id, seq_num)
                 if cached is not None:
-                    return cached   # a retry of a write we already applied
+                    return cached   # a retry of an already-applied write
             result = self._apply_op(op, entry)
             if tracked:
                 self._remember(client_id, seq_num, result)
@@ -98,9 +98,10 @@ class KVStateMachine:
             if expect_absent:
                 condition = cur is None
             elif expected_version > 0:
-                # Compare versions, not values: a value that changed and changed
-                # back (A -> B -> A) has a new version, so this cannot be fooled
-                # by the ABA problem the value comparison below is exposed to.
+                # I compare versions rather than values here: a value that
+                # changed and changed back (A -> B -> A) has a new version, so
+                # this can't be fooled by the ABA problem the value comparison
+                # below is exposed to.
                 condition = cur is not None and cur["version"] == expected_version
             else:
                 condition = cur is not None and cur["value"] == expected
@@ -170,7 +171,7 @@ class KVStateMachine:
                               "version": v["version"]}
                           for k, v in self.store.items()},
                 "tombstones": dict(self.tombstones),
-                # a list, so the eviction order survives the round trip
+                # stored as a list so the eviction order survives the round trip
                 "sessions": [[cid, s["seq"], _encode_result(s["result"])]
                              for cid, s in self.sessions.items()],
             }

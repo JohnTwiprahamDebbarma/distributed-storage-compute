@@ -62,11 +62,11 @@ class KVService:
     def _identity(idempotency_key: str | None, *request) -> tuple[str, int]:
         """The (client_id, seq_num) the store de-duplicates this write under.
 
-        Each HTTP request is its own client with seq_num 1. Requests handled at
-        the same time therefore never race on one client's sequence numbers,
+        I make each HTTP request its own client with seq_num 1, so requests
+        handled at the same time never race on one client's sequence numbers,
         and the gateway's own retries of a request are applied at most once.
 
-        With an Idempotency-Key the client_id is derived from the key together
+        With an Idempotency-Key I derive the client_id from the key together
         with the request itself: retrying the same request returns the original
         result, while reusing a key for a *different* request makes a new one.
         """

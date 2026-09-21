@@ -1,6 +1,6 @@
-# Part 6 — Web gateway (REST API)
+# Part 6: Web gateway (REST API)
 
-An HTTP/JSON API in front of the Raft key-value store (Part 3), built with FastAPI.
+An HTTP/JSON API I built with FastAPI in front of the Raft key-value store (Part 3).
 It turns the store's guarantees into standard HTTP:
 
 | The store (gRPC) | The web API (HTTP) |
@@ -9,7 +9,7 @@ It turns the store's guarantees into standard HTTP:
 | Compare-and-swap by version | `PUT` with `If-Match: "<version>"`: `412` if someone else wrote first |
 | Put-if-absent | `PUT` with `If-None-Match: *`: `201 Created`, or `412` |
 | `(client_id, seq_num)` de-duplication | The `Idempotency-Key` header |
-| `NOT_LEADER` redirects and elections | Handled inside the gateway; clients just see a slower response |
+| `NOT_LEADER` redirects and elections | Handled inside the gateway; clients only see a slower response |
 | `GetStatus` / `SetIsolated` | `GET /v1/cluster`, a live WebSocket, and `PUT /v1/cluster/nodes/{id}/isolation` |
 
 ## Run it
@@ -42,8 +42,8 @@ curl -i -X PUT localhost:8000/v1/cluster/nodes/0/isolation \
 | `GET /v1/kv/{key}` | Read; `?consistency=linearizable` adds a read barrier | `200` + `ETag`; `304` if `If-None-Match` is current | 404, 503 |
 | `PUT /v1/kv/{key}` | Write `{"value": "..."}` | `200` + `ETag`; `201` + `Location` with `If-None-Match: *` | 400, 412, 413, 422, 503, 504 |
 | `DELETE /v1/kv/{key}` | Delete | `204` | 404, 503, 504 |
-| `GET /v1/cluster` | Every node's role, term and log progress | `200` | — |
-| `WS /v1/cluster/stream` | The same status, pushed every 0.5 s | — | — |
+| `GET /v1/cluster` | Every node's role, term and log progress | `200` | - |
+| `WS /v1/cluster/stream` | The same status, pushed every 0.5 s | - | - |
 | `PUT /v1/cluster/nodes/{id}/isolation` | Cut a node off, or reconnect it (fault injection) | `200` | 404, 422, 503 |
 | `GET /healthz`, `GET /readyz` | Liveness; readiness (a connected leader exists) | `200` | 503 |
 
@@ -62,9 +62,9 @@ Every error is an RFC 9457 problem-details body (`application/problem+json`):
 | Status | Meaning | What the client should do |
 | --- | --- | --- |
 | 400 | A malformed or unsupported header, e.g. `If-Match: *` | Fix the request |
-| 404 | No such key | — |
-| 412 | A conditional write lost: the key changed since you read it | Re-read (the response carries the current `ETag`), then retry |
-| 413 | The value is over the size limit | — |
+| 404 | No such key | - |
+| 412 | A conditional write lost: the key changed after it was read | Re-read (the response carries the current `ETag`), then retry |
+| 413 | The value is over the size limit | - |
 | 422 | The body failed validation | Fix the body |
 | 503 | No leader was reachable in time; **nothing was applied** | Retry after `Retry-After` |
 | 504 | A write was sent but not confirmed; **it may or may not have been applied** | Retry with the same `Idempotency-Key` |
@@ -80,8 +80,8 @@ clients/    repository   gRPC to the nodes: leader tracking, redirects, retries
 domain.py   the types and errors all three share (no HTTP, no gRPC)
 ```
 
-Each layer calls only the one below it. That is what lets the hermetic tests swap the
-gRPC client for an in-memory fake and still run every route and rule.
+Each layer calls only the one below it. I split it this way so the hermetic tests can
+swap the gRPC client for an in-memory fake and still run every route and rule.
 
 ### Finding the leader
 
@@ -89,34 +89,35 @@ gRPC client for an in-memory fake and still run every route and rule.
 normally goes straight there. A `NOT_LEADER` reply redirects it to the leader it names; an
 unreachable node sends it on to the next node, pausing with capped exponential backoff and
 jitter (50 ms, doubling to 500 ms). It gives up after `KV_REQUEST_DEADLINE`, 12 s by
-default: long enough for a failover even when the first election is a split vote, given
-this project's deliberately slow 2–4 s election timeouts.
+default. I chose 12 s because that is long enough for a failover even when the first
+election is a split vote, given this project's deliberately slow 2-4 s election timeouts.
 
 ### Idempotency keys
 
 The store de-duplicates writes by `(client_id, seq_num)` in its replicated session table.
-The gateway gives every HTTP request its own `client_id` with `seq_num` 1, so requests
-handled at the same time never race on one sequence, and the gateway's own retries of a
-request are applied at most once.
+I give every HTTP request its own `client_id` with `seq_num` 1, so requests handled at
+the same time never race on one sequence, and the gateway's own retries of a request are
+applied at most once.
 
-With an `Idempotency-Key`, the `client_id` is a hash of the key *and* the request (key,
-value, conditions). Retrying the same request returns the original result, even from a new
-leader after a failover; reusing a key for a different request counts as a new request.
+With an `Idempotency-Key`, I make the `client_id` a hash of the key *and* the request
+(key, value, conditions). Retrying the same request returns the original result, even from
+a new leader after a failover; reusing a key for a different request counts as a new one.
 
 ### 503 or 504?
 
-If every attempt was answered `NOT_LEADER`, nothing was appended to any log, so the write
-was not applied: `503`. If any attempt failed in transit (a timeout, a dropped or refused
-connection), the gateway can't rule out that a leader appended it and will still commit it:
-`504`. For example, with both followers cut off, the leader appends the write but can't
-commit it without a majority; once they reconnect, it may commit after all.
+I return `503` only when every attempt was answered `NOT_LEADER`: then nothing was
+appended to any log, so the write was not applied. If any attempt failed in transit (a
+timeout, a dropped or refused connection), I can't rule out that a leader appended it and
+will still commit it, so I return `504`. For example, with both followers cut off, the
+leader appends the write but can't commit it without a majority; once they reconnect, it
+may commit after all.
 
 ### Browsers and CORS
 
-In development the dashboard is served from another origin (Vite, port 5173), so the API
-allows that origin (`CORS_ORIGINS`) along with the conditional and idempotency headers.
-It also lists `ETag`, `Location` and `Retry-After` as exposed headers, since browsers hide
-all other response headers from JavaScript.
+In development the dashboard is served from another origin (Vite, port 5173), so I allow
+that origin (`CORS_ORIGINS`) along with the conditional and idempotency headers. I also
+list `ETag`, `Location` and `Retry-After` as exposed headers, because browsers hide all
+other response headers from JavaScript.
 
 ### Configuration
 

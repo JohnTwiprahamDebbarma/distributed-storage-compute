@@ -161,10 +161,10 @@ def main():
     print(f"  current leader: {leader}")
     if leader:
         port = leader.split(":")[-1]
-        # -sTCP:LISTEN so we kill only the listening server, not our own client
-        # connection to that port (which lsof would otherwise also return).
+        # I pass -sTCP:LISTEN so only the listening server is killed, not this
+        # test's own client connection to that port (which lsof would also return).
         os.system(f"lsof -ti:{port} -sTCP:LISTEN | xargs kill 2>/dev/null")
-        print(f"  killed leader on :{port}; waiting for re-election…")
+        print(f"  killed leader on :{port}; waiting for re-election...")
         time.sleep(6)
         c.put("after", "failover")
         check("write succeeds after failover", c.get("after"), b"failover")

@@ -17,8 +17,8 @@ class ReplicatedDSFSClientStub:
     def __init__(self, server_addresses: list, cache_dir: str = CLIENT_CACHE_DIR,
                  max_retries: int = 5):
         """
-        server_addresses – list of "host:port" strings for ALL replicas
-        cache_dir        – local directory for cached files
+        server_addresses - list of "host:port" strings for ALL replicas
+        cache_dir        - local directory for cached files
         """
         self.server_addresses = server_addresses
         self.cache_dir        = cache_dir
@@ -73,7 +73,7 @@ class ReplicatedDSFSClientStub:
                 )
                 if resp.success and resp.primary_address:
                     primary = resp.primary_address
-                    # Ensure we have a connection to the primary
+                    # Make sure there is a connection to the primary
                     if primary not in self._conns:
                         self._connect(primary)
                     return primary
@@ -132,21 +132,21 @@ class ReplicatedDSFSClientStub:
                 last_err = e
                 details  = e.details() or ""
 
-                # Server told us to redirect
+                # The server asked for a redirect
                 if e.code() == grpc.StatusCode.FAILED_PRECONDITION:
                     if self._handle_not_primary(details):
                         addr = self._primary_addr
                         continue
                     raise Exception(f"gRPC FAILED_PRECONDITION: {details}")
 
-                # Transient errors – rediscover primary and retry
+                # Transient errors - rediscover primary and retry
                 if e.code() in (grpc.StatusCode.UNAVAILABLE,
                                 grpc.StatusCode.DEADLINE_EXCEEDED,
                                 grpc.StatusCode.RESOURCE_EXHAUSTED):
                     if attempt < self.max_retries:
                         backoff = 2 ** attempt
-                        print(f"[CLIENT] {e.code()} – rediscovering primary, "
-                              f"retry {attempt+1}/{self.max_retries} in {backoff}s …")
+                        print(f"[CLIENT] {e.code()} - rediscovering primary, "
+                              f"retry {attempt+1}/{self.max_retries} in {backoff}s ...")
                         time.sleep(backoff)
                         self._primary_addr = self._discover_primary()
                         addr = self._primary_addr
@@ -218,12 +218,12 @@ class ReplicatedDSFSClientStub:
 
             if server_version == local_version and os.path.exists(cached_path):
                 fetch_data = False
-                print(f"$$$$[CACHE HIT] {filename} v{local_version} – skipping download.")
+                print(f"$$$$[CACHE HIT] {filename} v{local_version} - skipping download.")
             elif server_version == local_version:
-                print(f"$$$$[CACHE MISS] {filename} cache file missing. Fetching …")
+                print(f"$$$$[CACHE MISS] {filename} cache file missing. Fetching ...")
             else:
                 print(f"$$$$[CACHE MISS] {filename} outdated "
-                      f"(local v{local_version}, server v{server_version}). Fetching …")
+                      f"(local v{local_version}, server v{server_version}). Fetching ...")
 
         req      = fs_pb2.OpenRequest(filename=filename, mode=mode, fetch_data=fetch_data)
         response = self._execute_rpc(self._rpc("Open"), req)
@@ -260,9 +260,9 @@ class ReplicatedDSFSClientStub:
         file_info = self.active_handles[file_handle]
         local_path = file_info["path"]
         
-        # If writing at offset 0 and we opened in "w", we should truncate the file
-        # to match standard POSIX overwrite behavior, otherwise we just overwrite
-        # the first N bytes and leave the rest (which caused Test 6 to fail).
+        # When writing at offset 0 to a file opened in "w", I truncate it to match
+        # standard POSIX overwrite behaviour; otherwise only the first N bytes get
+        # overwritten and the rest is left behind (which caused Test 6 to fail).
         if offset == 0 and "mode" in file_info and file_info["mode"] == "w":
             with open(local_path, "wb") as f:
                 f.write(data)

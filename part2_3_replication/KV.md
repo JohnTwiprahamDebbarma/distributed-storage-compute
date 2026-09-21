@@ -1,7 +1,7 @@
 # Raft Key-Value Store (mini-etcd)
 
 A linearizable, replicated key-value store I built on the Raft consensus engine
-from this project — the same core that replicates my file system, pointed at a
+from this project: the same core that replicates my file system, pointed at a
 key-value state machine instead. It is a small analogue of **etcd / ZooKeeper /
 Consul**: writes are agreed by a majority through the Raft log, and the cluster
 keeps serving through a leader failure.
@@ -9,7 +9,7 @@ keeps serving through a leader failure.
 ## 1. What it reuses
 
 I separated consensus from its state machine precisely so that the hard
-part — leader election, log replication, commit, persistence, snapshot install —
+part (leader election, log replication, commit, persistence, snapshot install)
 is reused **unchanged**:
 
 | Reused as-is | Adapted | New |
@@ -31,14 +31,14 @@ is reused **unchanged**:
 
 **Why CAS must go through the log:** the condition (*does the current value equal
 `expected`?*) and the write are evaluated together, atomically, in the state
-machine at apply time. Two clients cannot both win the same compare-and-swap —
-the log serializes them. This is the primitive you build locks, leader-election,
-and optimistic concurrency on top of (exactly what etcd's CAS is for).
+machine at apply time. Two clients cannot both win the same compare-and-swap,
+because the log serializes them. This is the primitive that locks, leader election and
+optimistic concurrency are built on (exactly what etcd's CAS is for).
 
-**Why compare versions, not values:** a value can change and change back
-(A → B → A), and a value-based CAS cannot tell. A key's version only ever grows —
-even across delete and re-create, because the state machine remembers a deleted
-key's last version — so a version-based CAS is immune to this ABA problem.
+**Why I compare versions, not values:** a value can change and change back
+(A -> B -> A), and a value-based CAS can't tell. A key's version only ever grows: I
+keep a deleted key's last version, so even a re-created key continues from it.
+That makes a version-based CAS immune to this ABA problem.
 
 **Admin RPCs** (on every node's `RaftService`, see `raft.proto`):
 
@@ -52,21 +52,21 @@ key's last version — so a version-based CAS is immune to this ABA problem.
 - **Writes** (`Put` / `Delete` / `Cas`) are linearizable: they commit only after a
   majority of replicas has the entry, then apply in log order on every node.
 - **Reads** (`Get`) are served by the leader:
-  - `linearizable=false` (default) — served immediately from applied state. Fast,
+  - `linearizable=false` (default): served immediately from applied state. Fast,
     and consistent except in the brief window where a partitioned "zombie" leader
     hasn't yet learned it was deposed (a stale read).
-  - `linearizable=true` — the leader first commits a no-op **read barrier**. That
+  - `linearizable=true`: the leader first commits a no-op **read barrier**. That
     entry cannot commit without a current majority, which proves this node is
     still the leader and its applied state reflects every acknowledged write (a
     simple [ReadIndex](https://raft.github.io/)).
 - **Exactly-once writes:** every mutating call carries a `(client_id, seq_num)`.
-  The state machine keeps a **session table** (client → latest `seq_num` and its
-  result) that only `apply()` changes, so it is replicated with the log and every
-  node holds the same copy. A retry is answered from the table instead of being
-  applied twice — even one that reaches a *new* leader after failover, which a
-  per-node cache would re-apply (`test_kv_cluster.py` checks exactly this). The
-  table is bounded at 10,000 clients; the least recently active one is evicted in
-  log order, so every replica evicts the same one.
+  I keep a **session table** (client -> latest `seq_num` and its result) in the
+  state machine, and only `apply()` changes it, so it is replicated with the log
+  and every node holds the same copy. A retry is answered from the table instead
+  of being applied twice, even one that reaches a *new* leader after failover,
+  which a per-node cache would re-apply (`test_kv_cluster.py` checks exactly
+  this). I bound the table at 10,000 clients and evict the least recently active
+  one in log order, so every replica evicts the same one.
 
 ## 4. Run it
 
@@ -98,15 +98,15 @@ kv.put_if_absent("owner", "node-a")   # True the first time, False after
 
 ## 5. Tests
 
-- `test_kv_state_machine.py` — hermetic unit tests of the state machine
+- `test_kv_state_machine.py`: hermetic unit tests of the state machine
   (versioning, delete, CAS by value and by version including the ABA case,
   put-if-absent, replicated de-duplication, snapshot/restore). No gRPC or cluster
   required.
-- `test_raft_status_isolation.py` — hermetic tests of `GetStatus` and of
+- `test_raft_status_isolation.py`: hermetic tests of `GetStatus` and of
   isolation: an isolated leader sends no heartbeats, an isolated candidate
   requests no votes, and a node heals itself on schedule.
-- `test_kv_cluster.py` — functional tests against a live 3-node cluster: all of
-  the above over the network, linearizable reads, node status, **exactly-once
+- `test_kv_cluster.py`: functional tests against a live 3-node cluster, covering
+  all of the above over the network, linearizable reads, node status, **exactly-once
   retries across failover** (isolates the leader, then re-sends an
   already-committed write to the new leader), and an automated
   **leader-failover** test (kills the leader, then confirms writes still succeed
@@ -122,4 +122,4 @@ kv.put_if_absent("owner", "node-a")   # True the first time, False after
   does not yet snapshot-and-truncate on a size threshold, so the log grows
   unbounded over a long run.
 - **Single-key operations only:** no multi-key transactions, watches, or leases
-  yet — the natural next features for a real etcd-like store.
+  yet, which are the natural next features for a real etcd-like store.

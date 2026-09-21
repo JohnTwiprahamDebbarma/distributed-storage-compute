@@ -104,13 +104,13 @@ assert_eq("final version content", last[:9], b"version 4")
 sep("TEST 5: Leader failover")
 print("  Kill the current leader manually in another terminal, then press Enter.")
 print("  Command:  kill $(lsof -ti:50051)   # or whichever port is the leader")
-print("  Press Enter when done (or just press Enter to skip this test)…")
+print("  Press Enter when done (or just press Enter to skip this test)...")
 inp = input("  > ").strip()
 
 if inp == "" or inp.lower() == "skip":
     print("  [SKIP] Failover test skipped.")
 else:
-    print("  Waiting 5s for new leader election…")
+    print("  Waiting 5s for new leader election...")
     time.sleep(5)
     try:
         h = client.open(TEST_FILE, "r")

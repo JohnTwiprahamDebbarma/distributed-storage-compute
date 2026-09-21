@@ -1,5 +1,5 @@
 """
-Gateway settings, read from environment variables so the same code runs
+Gateway settings. I read them from environment variables so the same code runs
 unchanged on a laptop, in Docker Compose and on a cloud VM.
 
     KV_NODES             node addresses in node-id order (default: localhost:50051-50053)
@@ -19,9 +19,9 @@ class Settings:
     # The i-th address is node i, matching nodes_config.json.
     kv_nodes: tuple[str, ...] = ("localhost:50051", "localhost:50052", "localhost:50053")
     rpc_timeout: float = 3.0
-    # Long enough for a failover even when the first election is a split vote:
-    # up to 4 s to time out, 2 s waiting for votes, then up to 4 s more
-    # (raft_node.py's deliberately slow, easy-to-watch timings).
+    # I made this long enough for a failover even when the first election is a
+    # split vote: up to 4 s to time out, 2 s waiting for votes, then up to 4 s
+    # more (raft_node.py's deliberately slow, easy-to-watch timings).
     request_deadline: float = 12.0
     max_value_bytes: int = 64 * 1024
     cors_origins: tuple[str, ...] = ("http://localhost:5173",)

@@ -8,8 +8,9 @@ node sends it on to the next one, with capped exponential backoff, until the
 request's deadline runs out. Retrying a write is safe because every write
 carries a (client_id, seq_num) that the store de-duplicates (kv_state_machine.py).
 
-Unlike kv_client_stub.py, which is one client object making one call at a time,
-this client is shared by every request the web server handles concurrently.
+I wrote this instead of reusing kv_client_stub.py because that stub is one client
+object making one call at a time, while this client is shared by every request
+the web server handles concurrently.
 """
 
 import random
@@ -21,8 +22,8 @@ from pathlib import Path
 
 import grpc
 
-# The generated stubs live in ../../../part2_3_replication (run setup_raft.sh
-# there first). Append, don't insert, so nothing there shadows this package.
+# The generated stubs live in ../../../part2_3_replication (setup_raft.sh there
+# generates them). I append rather than insert so nothing there shadows this package.
 _KV_DIR = str(Path(__file__).resolve().parents[3] / "part2_3_replication")
 if _KV_DIR not in sys.path:
     sys.path.append(_KV_DIR)
@@ -37,7 +38,8 @@ from gateway.domain import ClusterUnavailable, NodeStatus, StoreError, WriteOutc
 # Transport failures worth retrying on another node.
 _RETRYABLE = (grpc.StatusCode.UNAVAILABLE, grpc.StatusCode.DEADLINE_EXCEEDED)
 
-# Reconnect quickly once a node comes back (gRPC's default backoff grows to 2 min).
+# I shorten gRPC's reconnect backoff (its default grows to 2 min) so a channel
+# reconnects soon after its node comes back.
 _CHANNEL_OPTIONS = [
     ("grpc.initial_reconnect_backoff_ms", 200),
     ("grpc.max_reconnect_backoff_ms", 2000),
@@ -65,9 +67,9 @@ class RaftCluster:
         self.request_deadline = request_deadline
 
         self._lock = threading.Lock()
-        self._leader = self.nodes[0]            # a guess until a node tells us otherwise
+        self._leader = self.nodes[0]            # a guess until a node names the real leader
 
-        # Status is cached briefly, so any number of dashboards polling at once
+        # I cache the status briefly so any number of dashboards polling at once
         # cost the nodes the same as one; the lock makes concurrent callers
         # share a single fetch instead of each starting their own.
         self._status_lock = threading.Lock()
@@ -158,7 +160,8 @@ class RaftCluster:
         redirects = 0           # consecutive redirects followed without a pause
         # A write whose attempt failed in transit may have reached the leader and
         # committed. Retrying it is still safe (the store de-duplicates it), but
-        # if we run out of time we can't say it was not applied.
+        # if time runs out it has to be reported as "maybe applied", never as
+        # "not applied".
         maybe_applied = False
         last_problem = "no attempt finished"
 
@@ -207,7 +210,7 @@ class RaftCluster:
             f"no leader reachable within {self.request_deadline:g}s ({last_problem})")
 
     def _redirect_target(self, error_message: str):
-        """The node a NOT_LEADER:<id>:<host:port> reply points to, if we know it."""
+        """The node a NOT_LEADER:<id>:<host:port> reply points to, if it is a known node."""
         _, leader_id, address = (error_message.split(":", 2) + ["", ""])[:3]
         if address in self._by_address:
             return self._by_address[address]
